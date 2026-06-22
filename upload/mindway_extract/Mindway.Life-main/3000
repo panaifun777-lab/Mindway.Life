@@ -1,0 +1,13 @@
+▲ Next.js 16.1.3 (Turbopack)
+- Local:         http://localhost:3000
+- Network:       http://21.0.22.72:3000
+- Environments: .env
+
+✓ Starting...
+✓ Ready in 528ms
+ GET / 200 in 1543ms (compile: 1346ms, render: 198ms)
+⚠ Cross origin request detected from 21.0.22.72 to /_next/* resource. In a future major version of Next.js, you will need to explicitly configure "allowedDevOrigins" in next.config to allow this.
+Read more: https://nextjs.org/docs/app/api-reference/config/next-config-js/allowedDevOrigins
+prisma:query SELECT `main`.`Philosopher`.`id`, `main`.`Philosopher`.`nameCn`, `main`.`Philosopher`.`nameEn`, `main`.`Philosopher`.`slug`, `main`.`Philosopher`.`era`, `main`.`Philosopher`.`category`, `main`.`Philosopher`.`avatarUrl`, `main`.`Philosopher`.`tagline`, `main`.`Philosopher`.`bioSummary`, `main`.`Philosopher`.`coreInsight`, `main`.`Philosopher`.`worries`, `main`.`Philosopher`.`works`, `main`.`Philosopher`.`quote`, `main`.`Philosopher`.`quoteSource`, `main`.`Philosopher`.`systemPrompt`, `main`.`Philosopher`.`order`, `main`.`Philosopher`.`published`, `main`.`Philosopher`.`createdAt`, `main`.`Philosopher`.`updatedAt` FROM `main`.`Philosopher` WHERE `main`.`Philosopher`.`published` = ? ORDER BY `main`.`Philosopher`.`order` ASC LIMIT ? OFFSET ?
+ GET /api/philosophers 200 in 99ms (compile: 77ms, render: 22ms)
+ GET / 200 in 31ms (compile: 4ms, render: 27ms)

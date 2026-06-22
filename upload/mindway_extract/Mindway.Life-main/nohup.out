@@ -1,0 +1,17 @@
+▲ Next.js 16.1.3
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+
+✓ Starting...
+✓ Ready in 54ms
+prisma:query SELECT `main`.`users`.`id`, `main`.`users`.`email`, `main`.`users`.`name`, `main`.`users`.`plan`, `main`.`users`.`avatar`, `main`.`users`.`createdAt` FROM `main`.`users` WHERE (`main`.`users`.`id` = ? AND 1=1) LIMIT ? OFFSET ?
+prisma:query SELECT `main`.`Philosopher`.`id`, `main`.`Philosopher`.`nameCn`, `main`.`Philosopher`.`nameEn`, `main`.`Philosopher`.`slug`, `main`.`Philosopher`.`era`, `main`.`Philosopher`.`category`, `main`.`Philosopher`.`avatarUrl`, `main`.`Philosopher`.`tagline`, `main`.`Philosopher`.`bioSummary`, `main`.`Philosopher`.`coreInsight`, `main`.`Philosopher`.`worries`, `main`.`Philosopher`.`works`, `main`.`Philosopher`.`recommendedBooks`, `main`.`Philosopher`.`quote`, `main`.`Philosopher`.`quoteSource`, `main`.`Philosopher`.`systemPrompt`, `main`.`Philosopher`.`order`, `main`.`Philosopher`.`isHost`, `main`.`Philosopher`.`published`, `main`.`Philosopher`.`createdAt`, `main`.`Philosopher`.`updatedAt` FROM `main`.`Philosopher` WHERE `main`.`Philosopher`.`published` = ? ORDER BY `main`.`Philosopher`.`order` ASC LIMIT ? OFFSET ?
+prisma:query SELECT 1
+prisma:query SELECT `main`.`Philosopher`.`id`, `main`.`Philosopher`.`nameCn`, `main`.`Philosopher`.`nameEn`, `main`.`Philosopher`.`slug`, `main`.`Philosopher`.`era`, `main`.`Philosopher`.`category`, `main`.`Philosopher`.`avatarUrl`, `main`.`Philosopher`.`tagline`, `main`.`Philosopher`.`bioSummary`, `main`.`Philosopher`.`coreInsight`, `main`.`Philosopher`.`worries`, `main`.`Philosopher`.`works`, `main`.`Philosopher`.`recommendedBooks`, `main`.`Philosopher`.`quote`, `main`.`Philosopher`.`quoteSource`, `main`.`Philosopher`.`systemPrompt`, `main`.`Philosopher`.`order`, `main`.`Philosopher`.`isHost`, `main`.`Philosopher`.`published`, `main`.`Philosopher`.`createdAt`, `main`.`Philosopher`.`updatedAt` FROM `main`.`Philosopher` WHERE `main`.`Philosopher`.`published` = ? ORDER BY `main`.`Philosopher`.`order` ASC LIMIT ? OFFSET ?
+bash: line 1: 16335 Killed                  node .next/standalone/server.js -p 3000
+▲ Next.js 16.1.3
+- Local:         http://localhost:3000
+- Network:       http://0.0.0.0:3000
+
+✓ Starting...
+✓ Ready in 57ms

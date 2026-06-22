@@ -1,0 +1,708 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useEffect, useMemo } from 'react'
+     4→     4→import { motion, type Variants } from 'framer-motion'
+     5→     5→import { Check, X, Crown, Sparkles, Star, ArrowLeft, ExternalLink, CreditCard, Smartphone, QrCode, Home, ToggleLeft, ToggleRight } from 'lucide-react'
+     6→     6→import { Button } from '@/components/ui/button'
+     7→     7→import { Badge } from '@/components/ui/badge'
+     8→     8→import { useAppStore } from '@/lib/store'
+     9→     9→import { useQuery } from '@tanstack/react-query'
+    10→    10→import { useToast } from '@/hooks/use-toast'
+    11→    11→import ThemeToggle from '@/components/theme-toggle'
+    12→    12→import {
+    13→    13→  Dialog,
+    14→    14→  DialogContent,
+    15→    15→  DialogDescription,
+    16→    16→  DialogHeader,
+    17→    17→  DialogTitle,
+    18→    18→} from '@/components/ui/dialog'
+    19→    19→
+    20→    20→interface Plan {
+    21→    21→  id: string
+    22→    22→  name: string
+    23→    23→  nameEn: string
+    24→    24→  price: number
+    25→    25→  priceDisplay: string
+    26→    26→  features: string[]
+    27→    27→  limitations: string[]
+    28→    28→  cta: string
+    29→    29→  popular: boolean
+    30→    30→  paymentLink?: string
+    31→    31→}
+    32→    32→
+    33→    33→// Configurable payment links - change these to update payment URLs
+    34→    34→const PAYMENT_CONFIG = {
+    35→    35→  pro: {
+    36→    36→    monthly: 'https://mp.weixin.qq.com/s/pro-subscription',
+    37→    37→    annual: 'https://mp.weixin.qq.com/s/pro-annual-subscription',
+    38→    38→  },
+    39→    39→  premium: {
+    40→    40→    monthly: 'https://mp.weixin.qq.com/s/premium-subscription',
+    41→    41→    annual: 'https://mp.weixin.qq.com/s/premium-annual-subscription',
+    42→    42→  },
+    43→    43→}
+    44→    44→
+    45→    45→// Annual pricing config (20% off monthly equivalent)
+    46→    46→const ANNUAL_PRICING: Record<string, { monthlyPrice: number; annualPrice: number; monthlyEquivalent: number; savings: number; display: string }> = {
+    47→    47→  pro: {
+    48→    48→    monthlyPrice: 29.9,
+    49→    49→    annualPrice: 288,
+    50→    50→    monthlyEquivalent: 24,
+    51→    51→    savings: 20,
+    52→    52→    display: '¥288/年',
+    53→    53→  },
+    54→    54→  premium: {
+    55→    55→    monthlyPrice: 99,
+    56→    56→    annualPrice: 948,
+    57→    57→    monthlyEquivalent: 79,
+    58→    58→    savings: 20,
+    59→    59→    display: '¥948/年',
+    60→    60→  },
+    61→    61→}
+    62→    62→
+    63→    63→// Fallback plans in case API is unavailable
+    64→    64→const fallbackPlans: Plan[] = [
+    65→    65→  {
+    66→    66→    id: 'free',
+    67→    67→    name: '免费版',
+    68→    68→    nameEn: 'Free',
+    69→    69→    price: 0,
+    70→    70→    priceDisplay: '免费',
+    71→    71→    features: ['每天3次AI对话', '浏览全部20+哲学家', '参与性格测试', '查看哲学家推荐书单'],
+    72→    72→    limitations: ['每日对话次数限制', '无法使用辩论场', '无法与飘叔深度对话'],
+    73→    73→    cta: '免费使用',
+    74→    74→    popular: false,
+    75→    75→    paymentLink: '',
+    76→    76→  },
+    77→    77→  {
+    78→    78→    id: 'pro',
+    79→    79→    name: '专业版',
+    80→    80→    nameEn: 'Pro',
+    81→    81→    price: 2990,
+    82→    82→    priceDisplay: '¥29.9/月',
+    83→    83→    features: ['无限AI对话', '全部20+哲学家', '参与性格测试', '查看推荐书单', '使用辩论场功能', '与飘叔深度对话', '对话历史云同步', '优先响应速度'],
+    84→    84→    limitations: [],
+    85→    85→    cta: '立即订阅',
+    86→    86→    popular: true,
+    87→    87→    paymentLink: PAYMENT_CONFIG.pro.monthly,
+    88→    88→  },
+    89→    89→  {
+    90→    90→    id: 'premium',
+    91→    91→    name: '旗舰版',
+    92→    92→    nameEn: 'Premium',
+    93→    93→    price: 9900,
+    94→    94→    priceDisplay: '¥99/月',
+    95→    95→    features: ['全部专业版功能', '专属飘叔1对1指导', '自定义哲学家人格', '哲学思维训练营', '线下沙龙优先权', '专属社群入口', 'API接口访问', '终身书单定制'],
+    96→    96→    limitations: [],
+    97→    97→    cta: '尊享订阅',
+    98→    98→    popular: false,
+    99→    99→    paymentLink: PAYMENT_CONFIG.premium.monthly,
+   100→   100→  },
+   101→   101→]
+   102→   102→
+   103→   103→// Animation variants
+   104→   104→const containerVariants: Variants = {
+   105→   105→  hidden: { opacity: 0 },
+   106→   106→  visible: {
+   107→   107→    opacity: 1,
+   108→   108→    transition: {
+   109→   109→      staggerChildren: 0.15,
+   110→   110→      delayChildren: 0.3,
+   111→   111→    },
+   112→   112→  },
+   113→   113→}
+   114→   114→
+   115→   115→const cardVariants: Variants = {
+   116→   116→  hidden: { opacity: 0, y: 40, scale: 0.95 },
+   117→   117→  visible: {
+   118→   118→    opacity: 1,
+   119→   119→    y: 0,
+   120→   120→    scale: 1,
+   121→   121→    transition: {
+   122→   122→      duration: 0.6,
+   123→   123→      ease: [0.25, 0.46, 0.45, 0.94] as [number, number, number, number],
+   124→   124→      scale: {
+   125→   125→        duration: 0.5,
+   126→   126→        ease: [0.25, 0.1, 0.25, 1] as [number, number, number, number],
+   127→   127→      },
+   128→   128→    },
+   129→   129→  },
+   130→   130→}
+   131→   131→
+   132→   132→const heroVariants: Variants = {
+   133→   133→  hidden: { opacity: 0, y: -20 },
+   134→   134→  visible: {
+   135→   135→    opacity: 1,
+   136→   136→    y: 0,
+   137→   137→    transition: { duration: 0.6 },
+   138→   138→  },
+   139→   139→}
+   140→   140→
+   141→   141→const decorativeLineVariants: Variants = {
+   142→   142→  hidden: { scaleX: 0 },
+   143→   143→  visible: {
+   144→   144→    scaleX: 1,
+   145→   145→    transition: { duration: 0.8, delay: 0.2 },
+   146→   146→  },
+   147→   147→}
+   148→   148→
+   149→   149→export default function SubscriptionView() {
+   150→   150→  const { setView, user, isAuthenticated } = useAppStore()
+   151→   151→  const { toast } = useToast()
+   152→   152→  const [selectedPlan, setSelectedPlan] = useState<Plan | null>(null)
+   153→   153→  const [showPaymentDialog, setShowPaymentDialog] = useState(false)
+   154→   154→  const [isAnnual, setIsAnnual] = useState(false)
+   155→   155→  const [paymentMethod, setPaymentMethod] = useState<'wechat' | 'alipay' | null>(null)
+   156→   156→
+   157→   157→  const { data } = useQuery<{ plans: Plan[] }>({
+   158→   158→    queryKey: ['subscription-plans'],
+   159→   159→    queryFn: () => fetch('/api/subscription/plans').then(res => res.json()),
+   160→   160→    staleTime: 5 * 60 * 1000,
+   161→   161→  })
+   162→   162→
+   163→   163→  const plans = data?.plans || fallbackPlans
+   164→   164→
+   165→   165→  const handleCTA = (plan: Plan) => {
+   166→   166→    if (plan.id === 'free') {
+   167→   167→      if (!isAuthenticated) {
+   168→   168→        setView('login')
+   169→   169→      }
+   170→   170→      return
+   171→   171→    }
+   172→   172→
+   173→   173→    // For paid plans, need login first
+   174→   174→    if (!isAuthenticated) {
+   175→   175→      setView('login')
+   176→   176→      return
+   177→   177→    }
+   178→   178→
+   179→   179→    // Show payment dialog
+   180→   180→    setSelectedPlan(plan)
+   181→   181→    setPaymentMethod(null)
+   182→   182→    setShowPaymentDialog(true)
+   183→   183→  }
+   184→   184→
+   185→   185→  const getCTALabel = (plan: Plan) => {
+   186→   186→    if (!isAuthenticated || !user) return plan.cta
+   187→   187→    if (user.plan === plan.id) {
+   188→   188→      return '当前方案'
+   189→   189→    }
+   190→   190→    return plan.cta
+   191→   191→  }
+   192→   192→
+   193→   193→  const isCurrentPlan = (planId: string) => {
+   194→   194→    return isAuthenticated && user?.plan === planId
+   195→   195→  }
+   196→   196→
+   197→   197→  const getPlanIcon = (planId: string) => {
+   198→   198→    switch (planId) {
+   199→   199→      case 'free':
+   200→   200→        return <Sparkles className="size-5" />
+   201→   201→      case 'pro':
+   202→   202→        return <Star className="size-5" />
+   203→   203→      case 'premium':
+   204→   204→        return <Crown className="size-5" />
+   205→   205→      default:
+   206→   206→        return <Sparkles className="size-5" />
+   207→   207→    }
+   208→   208→  }
+   209→   209→
+   210→   210→  // Get the display price for a plan based on billing cycle
+   211→   211→  const getDisplayPrice = (plan: Plan) => {
+   212→   212→    if (plan.id === 'free') return plan.priceDisplay
+   213→   213→    if (isAnnual && ANNUAL_PRICING[plan.id]) {
+   214→   214→      return ANNUAL_PRICING[plan.id].display
+   215→   215→    }
+   216→   216→    return plan.priceDisplay
+   217→   217→  }
+   218→   218→
+   219→   219→  // Get payment link based on billing cycle
+   220→   220→  const getPaymentLink = (planId: string) => {
+   221→   221→    if (planId === 'free') return ''
+   222→   222→    const config = PAYMENT_CONFIG[planId as keyof typeof PAYMENT_CONFIG]
+   223→   223→    if (!config) return ''
+   224→   224→    return isAnnual ? config.annual : config.monthly
+   225→   225→  }
+   226→   226→
+   227→   227→  return (
+   228→   228→    <motion.div
+   229→   229→      initial={{ opacity: 0, x: 30 }}
+   230→   230→      animate={{ opacity: 1, x: 0 }}
+   231→   231→      exit={{ opacity: 0, x: 30 }}
+   232→   232→      className="min-h-screen flex flex-col bg-[var(--app-bg)]"
+   233→   233→    >
+   234→   234→      {/* Header */}
+   235→   235→      <header className="sticky top-0 z-10 bg-[var(--app-header-bg)] backdrop-blur-sm border-b border-[var(--app-border)] px-4 py-3">
+   236→   236→        <div className="max-w-6xl mx-auto flex items-center gap-3">
+   237→   237→          <Button
+   238→   238→            variant="ghost"
+   239→   239→            size="icon"
+   240→   240→            onClick={() => setView('home')}
+   241→   241→            className="text-[var(--app-text-secondary)] hover:bg-[var(--app-bg-card)] shrink-0 min-h-[44px] min-w-[44px]"
+   242→   242→            aria-label="返回首页"
+   243→   243→          >
+   244→   244→            <ArrowLeft className="size-5" />
+   245→   245→          </Button>
+   246→   246→          <div className="flex-1 min-w-0">
+   247→   247→            <h3
+   248→   248→              className="font-serif font-bold text-[var(--app-text-primary)] text-sm"
+   249→   249→              style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
+   250→   250→            >
+   251→   251→              订阅方案
+   252→   252→            </h3>
+   253→   253→          </div>
+   254→   254→          <ThemeToggle />
+   255→   255→        </div>
+   256→   256→      </header>
+   257→   257→
+   258→   258→      {/* Content */}
+   259→   259→      <div className="flex-1 overflow-y-auto">
+   260→   260→        <div className="py-8 md:py-12">
+   261→   261→      <div className="max-w-6xl mx-auto px-4">
+   262→   262→        {/* Hero Section */}
+   263→   263→        <motion.div
+   264→   264→          variants={heroVariants}
+   265→   265→          initial="hidden"
+   266→   266→          animate="visible"
+   267→   267→          className="text-center mb-10 md:mb-14"
+   268→   268→        >
+   269→   269→          {/* Decorative top line */}
+   270→   270→          <div className="flex items-center justify-center gap-3 mb-6">
+   271→   271→            <motion.div
+   272→   272→              variants={decorativeLineVariants}
+   273→   273→              initial="hidden"
+   274→   274→              animate="visible"
+   275→   275→              className="w-12 md:w-20 h-[1px] bg-[var(--app-accent)] opacity-50 origin-right"
+   276→   276→            />
+   277→   277→            <motion.div
+   278→   278→              initial={{ scale: 0, rotate: -180 }}
+   279→   279→              animate={{ scale: 1, rotate: 0 }}
+   280→   280→              transition={{ delay: 0.4, duration: 0.5, type: 'spring', stiffness: 200 }}
+   281→   281→            >
+   282→   282→              <Crown className="size-5 text-[var(--app-accent)]" />
+   283→   283→            </motion.div>
+   284→   284→            <motion.div
+   285→   285→              variants={decorativeLineVariants}
+   286→   286→              initial="hidden"
+   287→   287→              animate="visible"
+   288→   288→              className="w-12 md:w-20 h-[1px] bg-[var(--app-accent)] opacity-50 origin-left"
+   289→   289→            />
+   290→   290→          </div>
+   291→   291→
+   292→   292→          <h1
+   293→   293→            className="text-3xl md:text-4xl lg:text-5xl font-serif font-bold text-[var(--app-text-primary)] mb-4 leading-tight"
+   294→   294→            style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
+   295→   295→          >
+   296→   296→            解锁哲学的深度
+   297→   297→          </h1>
+   298→   298→          <p className="text-[var(--app-text-secondary)] text-base md:text-lg max-w-lg mx-auto leading-relaxed">
+   299→   299→            选择适合你的方案，让思想者为你的人生导航
+   300→   300→          </p>
+   301→   301→
+   302→   302→          {/* Monthly/Annual Toggle */}
+   303→   303→          <div className="flex items-center justify-center gap-3 mt-6">
+   304→   304→            <span className={`text-sm font-medium transition-colors ${!isAnnual ? 'text-[var(--app-text-primary)]' : 'text-[var(--app-text-muted)]'}`}>
+   305→   305→              按月付费
+   306→   306→            </span>
+   307→   307→            <button
+   308→   308→              onClick={() => setIsAnnual(!isAnnual)}
+   309→   309→              className="relative inline-flex items-center w-12 h-6 rounded-full transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-[var(--app-accent)] focus-visible:ring-offset-2"
+   310→   310→              style={{ backgroundColor: isAnnual ? 'var(--app-accent)' : 'var(--app-border)' }}
+   311→   311→              aria-label={isAnnual ? '切换到月付' : '切换到年付'}
+   312→   312→              role="switch"
+   313→   313→              aria-checked={isAnnual}
+   314→   314→            >
+   315→   315→              <span
+   316→   316→                className={`inline-block size-5 rounded-full bg-white shadow-sm transform transition-transform duration-200 ${
+   317→   317→                  isAnnual ? 'translate-x-6' : 'translate-x-0.5'
+   318→   318→                }`}
+   319→   319→              />
+   320→   320→            </button>
+   321→   321→            <span className={`text-sm font-medium transition-colors ${isAnnual ? 'text-[var(--app-text-primary)]' : 'text-[var(--app-text-muted)]'}`}>
+   322→   322→              按年付费
+   323→   323→            </span>
+   324→   324→            {isAnnual && (
+   325→   325→              <Badge className="bg-[var(--app-accent)]/15 text-[var(--app-accent)] border-[var(--app-accent)]/30 text-xs">
+   326→   326→                省20%
+   327→   327→              </Badge>
+   328→   328→            )}
+   329→   329→          </div>
+   330→   330→
+   331→   331→          {/* Decorative bottom line */}
+   332→   332→          <div className="flex items-center justify-center gap-2 mt-6">
+   333→   333→            <div className="w-1.5 h-1.5 rounded-full bg-[var(--app-accent)] opacity-60" />
+   334→   334→            <div className="w-8 h-[1px] bg-[var(--app-accent)] opacity-40" />
+   335→   335→            <div className="w-2 h-2 rounded-full bg-[var(--app-accent)] opacity-80" />
+   336→   336→            <div className="w-8 h-[1px] bg-[var(--app-accent)] opacity-40" />
+   337→   337→            <div className="w-1.5 h-1.5 rounded-full bg-[var(--app-accent)] opacity-60" />
+   338→   338→          </div>
+   339→   339→        </motion.div>
+   340→   340→
+   341→   341→        {/* Pricing Cards */}
+   342→   342→        <motion.div
+   343→   343→          variants={containerVariants}
+   344→   344→          initial="hidden"
+   345→   345→          animate="visible"
+   346→   346→          className="grid grid-cols-1 md:grid-cols-3 gap-6 md:gap-5 lg:gap-6 items-start"
+   347→   347→        >
+   348→   348→          {plans.map((plan) => {
+   349→   349→            const popular = plan.popular
+   350→   350→            const current = isCurrentPlan(plan.id)
+   351→   351→            const annualInfo = ANNUAL_PRICING[plan.id]
+   352→   352→
+   353→   353→            return (
+   354→   354→              <motion.div
+   355→   355→                key={plan.id}
+   356→   356→                variants={cardVariants}
+   357→   357→                whileHover={{ y: -4, transition: { duration: 0.2 } }}
+   358→   358→                className={`
+   359→   359→                  relative rounded-2xl border overflow-hidden
+   360→   360→                  transition-shadow duration-300
+   361→   361→                  ${popular
+   362→   362→                    ? 'border-[var(--app-accent)] shadow-xl shadow-[var(--app-accent)]/10 md:scale-105 md:z-10'
+   363→   363→                    : 'border-[var(--app-border)] shadow-md'
+   364→   364→                  }
+   365→   365→                  ${current
+   366→   366→                    ? 'ring-2 ring-[var(--app-accent)] ring-offset-2 ring-offset-[var(--app-bg)]'
+   367→   367→                    : ''
+   368→   368→                  }
+   369→   369→                `}
+   370→   370→              >
+   371→   371→                {/* Popular badge */}
+   372→   372→                {popular && (
+   373→   373→                  <div className="absolute top-0 left-0 right-0 bg-[var(--app-accent)] text-white text-center py-1.5 text-xs font-bold tracking-wider">
+   374→   374→                    ✦ 最受欢迎 ✦
+   375→   375→                  </div>
+   376→   376→                )}
+   377→   377→
+   378→   378→                {/* Card content */}
+   379→   379→                <div
+   380→   380→                  className={`
+   381→   381→                    p-6 md:p-7
+   382→   382→                    ${popular ? 'pt-10 md:pt-11' : ''}
+   383→   383→                    bg-[var(--app-bg-card)]/80 backdrop-blur-sm
+   384→   384→                  `}
+   385→   385→                >
+   386→   386→                  {/* Plan icon + name */}
+   387→   387→                  <div className="flex items-center gap-3 mb-4">
+   388→   388→                    <div
+   389→   389→                      className={`
+   390→   390→                        flex items-center justify-center size-10 rounded-xl
+   391→   391→                        ${popular
+   392→   392→                          ? 'bg-[var(--app-accent)] text-white'
+   393→   393→                          : 'bg-[var(--app-accent)]/15 text-[var(--app-accent)]'
+   394→   394→                        }
+   395→   395→                      `}
+   396→   396→                    >
+   397→   397→                      {getPlanIcon(plan.id)}
+   398→   398→                    </div>
+   399→   399→                    <div>
+   400→   400→                      <h3
+   401→   401→                        className="font-serif font-bold text-lg text-[var(--app-text-primary)]"
+   402→   402→                        style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
+   403→   403→                      >
+   404→   404→                        {plan.name}
+   405→   405→                      </h3>
+   406→   406→                      <p className="text-xs text-[var(--app-text-muted)]">{plan.nameEn}</p>
+   407→   407→                    </div>
+   408→   408→                  </div>
+   409→   409→
+   410→   410→                  {/* Price */}
+   411→   411→                  <div className="mb-6">
+   412→   412→                    <div
+   413→   413→                      className="text-3xl md:text-4xl font-serif font-bold text-[var(--app-text-primary)]"
+   414→   414→                      style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
+   415→   415→                    >
+   416→   416→                      {getDisplayPrice(plan)}
+   417→   417→                    </div>
+   418→   418→                    {plan.price > 0 && isAnnual && annualInfo && (
+   419→   419→                      <div className="mt-1">
+   420→   420→                        <p className="text-xs text-[var(--app-text-muted)]">
+   421→   421→                          约¥{annualInfo.monthlyEquivalent}/月 · 按年计费
+   422→   422→                        </p>
+   423→   423→                        <Badge className="mt-1 bg-green-500/10 text-green-600 border-green-500/20 text-[10px]">
+   424→   424→                          年付省{annualInfo.savings}%
+   425→   425→                        </Badge>
+   426→   426→                      </div>
+   427→   427→                    )}
+   428→   428→                    {plan.price > 0 && !isAnnual && (
+   429→   429→                      <p className="text-xs text-[var(--app-text-muted)] mt-1">按月计费，随时取消</p>
+   430→   430→                    )}
+   431→   431→                  </div>
+   432→   432→
+   433→   433→                  {/* Divider */}
+   434→   434→                  <div className="w-full h-[1px] bg-[var(--app-border)] mb-5" />
+   435→   435→
+   436→   436→                  {/* Features */}
+   437→   437→                  <div className="space-y-3 mb-4">
+   438→   438→                    {plan.features.map((feature, idx) => (
+   439→   439→                      <div key={idx} className="flex items-start gap-2.5">
+   440→   440→                        <div className="flex items-center justify-center size-5 rounded-full bg-[var(--app-accent)]/15 shrink-0 mt-0.5">
+   441→   441→                          <Check className="size-3 text-[var(--app-accent)]" />
+   442→   442→                        </div>
+   443→   443→                        <span className="text-sm text-[var(--app-text-primary)] leading-snug">{feature}</span>
+   444→   444→                      </div>
+   445→   445→                    ))}
+   446→   446→                  </div>
+   447→   447→
+   448→   448→                  {/* Limitations */}
+   449→   449→                  {plan.limitations.length > 0 && (
+   450→   450→                    <div className="space-y-3 mb-5">
+   451→   451→                      {plan.limitations.map((limitation, idx) => (
+   452→   452→                        <div key={idx} className="flex items-start gap-2.5">
+   453→   453→                          <div className="flex items-center justify-center size-5 rounded-full bg-[var(--app-text-muted)]/10 shrink-0 mt-0.5">
+   454→   454→                            <X className="size-3 text-[var(--app-text-muted)]" />
+   455→   455→                          </div>
+   456→   456→                          <span className="text-sm text-[var(--app-text-muted)] leading-snug">{limitation}</span>
+   457→   457→                        </div>
+   458→   458→                      ))}
+   459→   459→                    </div>
+   460→   460→                  )}
+   461→   461→
+   462→   462→                  {/* Spacer for cards without limitations */}
+   463→   463→                  {plan.limitations.length === 0 && <div className="mb-2" />}
+   464→   464→
+   465→   465→                  {/* CTA Button */}
+   466→   466→                  <Button
+   467→   467→                    onClick={() => handleCTA(plan)}
+   468→   468→                    disabled={current}
+   469→   469→                    className={`
+   470→   470→                      w-full min-h-[44px] rounded-xl font-bold text-sm
+   471→   471→                      ${current
+   472→   472→                        ? 'bg-[var(--app-bg-card)] text-[var(--app-text-muted)] border border-[var(--app-border)] cursor-default'
+   473→   473→                        : popular
+   474→   474→                          ? 'bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white shadow-lg shadow-[var(--app-accent)]/20'
+   475→   475→                          : 'bg-[var(--app-accent)]/10 hover:bg-[var(--app-accent)]/20 text-[var(--app-accent)] border border-[var(--app-accent)]/30'
+   476→   476→                      }
+   477→   477→                    `}
+   478→   478→                  >
+   479→   479→                    {current ? '✓ 当前方案' : getCTALabel(plan)}
+   480→   480→                  </Button>
+   481→   481→                </div>
+   482→   482→
+   483→   483→                {/* Premium decorative corner */}
+   484→   484→                {plan.id === 'premium' && (
+   485→   485→                  <div className="absolute top-0 right-0 w-20 h-20 overflow-hidden pointer-events-none">
+   486→   486→                    <div className="absolute top-0 right-0 w-28 h-28 origin-top-right rotate-45 translate-x-14 -translate-y-14 bg-[var(--app-accent)]/10" />
+   487→   487→                  </div>
+   488→   488→                )}
+   489→   489→              </motion.div>
+   490→   490→            )
+   491→   491→          })}
+   492→   492→        </motion.div>
+   493→   493→
+   494→   494→        {/* Bottom decorative quote */}
+   495→   495→        <motion.div
+   496→   496→          initial={{ opacity: 0 }}
+   497→   497→          animate={{ opacity: 1 }}
+   498→   498→          transition={{ delay: 1, duration: 0.8 }}
+   499→   499→          className="text-center mt-12 md:mt-16 mb-6"
+   500→   500→        >
+   501→   501→          <div className="flex items-center justify-center gap-3 mb-4">
+   502→   502→            <div className="w-8 h-[1px] bg-[var(--app-accent)] opacity-30" />
+   503→   503→            <div className="w-1.5 h-1.5 rounded-full bg-[var(--app-accent)] opacity-40" />
+   504→   504→            <div className="w-8 h-[1px] bg-[var(--app-accent)] opacity-30" />
+   505→   505→          </div>
+   506→   506→          <p
+   507→   507→            className="text-[var(--app-text-muted)] text-sm italic font-serif max-w-md mx-auto leading-relaxed"
+   508→   508→            style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
+   509→   509→          >
+   510→   510→            &ldquo;教育不是灌输，而是点燃火焰。&rdquo;
+   511→   511→          </p>
+   512→   512→          <p className="text-xs text-[var(--app-text-muted)] mt-2 opacity-60">—— 苏格拉底</p>
+   513→   513→
+   514→   514→          {/* Bottom ornament */}
+   515→   515→          <div className="flex items-center justify-center gap-2 mt-6">
+   516→   516→            <div className="w-1 h-1 rounded-full bg-[var(--app-accent)] opacity-30" />
+   517→   517→            <div className="w-1.5 h-1.5 rounded-full bg-[var(--app-accent)] opacity-50" />
+   518→   518→            <div className="w-1 h-1 rounded-full bg-[var(--app-accent)] opacity-30" />
+   519→   519→          </div>
+   520→   520→        </motion.div>
+   521→   521→
+   522→   522→        {/* Trust section */}
+   523→   523→        <motion.div
+   524→   524→          initial={{ opacity: 0, y: 20 }}
+   525→   525→          animate={{ opacity: 1, y: 0 }}
+   526→   526→          transition={{ delay: 1.2, duration: 0.6 }}
+   527→   527→          className="text-center mt-4 mb-8"
+   528→   528→        >
+   529→   529→          <div className="flex flex-wrap items-center justify-center gap-4 md:gap-6 text-xs text-[var(--app-text-muted)]">
+   530→   530→            <div className="flex items-center gap-1.5">
+   531→   531→              <Check className="size-3.5 text-[var(--app-accent)]" />
+   532→   532→              <span>7天无理由退款</span>
+   533→   533→            </div>
+   534→   534→            <div className="flex items-center gap-1.5">
+   535→   535→              <Check className="size-3.5 text-[var(--app-accent)]" />
+   536→   536→              <span>随时取消订阅</span>
+   537→   537→            </div>
+   538→   538→            <div className="flex items-center gap-1.5">
+   539→   539→              <Check className="size-3.5 text-[var(--app-accent)]" />
+   540→   540→              <span>安全支付保障</span>
+   541→   541→            </div>
+   542→   542→          </div>
+   543→   543→
+   544→   544→          {/* Return to home link */}
+   545→   545→          <div className="mt-6">
+   546→   546→            <button
+   547→   547→              onClick={() => setView('home')}
+   548→   548→              className="inline-flex items-center gap-1.5 text-sm text-[var(--app-accent)] hover:text-[var(--app-accent-hover)] transition-colors"
+   549→   549→            >
+   550→   550→              <Home className="size-4" />
+   551→   551→              返回首页
+   552→   552→            </button>
+   553→   553→          </div>
+   554→   554→        </motion.div>
+   555→   555→      </div>
+   556→   556→      </div>
+   557→   557→      </div>
+   558→   558→
+   559→   559→      {/* Payment Dialog */}
+   560→   560→      <Dialog open={showPaymentDialog} onOpenChange={setShowPaymentDialog}>
+   561→   561→        <DialogContent className="bg-[var(--app-bg-card)] border-[var(--app-border)] sm:max-w-md">
+   562→   562→          <DialogHeader>
+   563→   563→            <DialogTitle
+   564→   564→              className="font-serif text-[var(--app-text-primary)]"
+   565→   565→              style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
+   566→   566→            >
+   567→   567→              订阅{selectedPlan?.name}
+   568→   568→            </DialogTitle>
+   569→   569→            <DialogDescription className="text-[var(--app-text-secondary)]">
+   570→   570→              {selectedPlan && getDisplayPrice(selectedPlan)} · {isAnnual ? '按年计费' : '按月计费'}，随时取消
+   571→   571→            </DialogDescription>
+   572→   572→          </DialogHeader>
+   573→   573→
+   574→   574→          <div className="space-y-4 py-2">
+   575→   575→            {/* Plan summary */}
+   576→   576→            <div className="bg-[var(--app-bg)] rounded-xl p-4 border border-[var(--app-border)]">
+   577→   577→              <div className="flex items-center justify-between mb-2">
+   578→   578→                <span className="text-sm text-[var(--app-text-secondary)]">方案</span>
+   579→   579→                <span className="font-serif font-bold text-[var(--app-text-primary)]" style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}>
+   580→   580→                  {selectedPlan?.name}
+   581→   581→                </span>
+   582→   582→              </div>
+   583→   583→              <div className="flex items-center justify-between">
+   584→   584→                <span className="text-sm text-[var(--app-text-secondary)]">金额</span>
+   585→   585→                <span className="text-xl font-serif font-bold text-[var(--app-accent)]" style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}>
+   586→   586→                  {selectedPlan && getDisplayPrice(selectedPlan)}
+   587→   587→                </span>
+   588→   588→              </div>
+   589→   589→              {isAnnual && selectedPlan && ANNUAL_PRICING[selectedPlan.id] && (
+   590→   590→                <div className="flex items-center justify-between mt-1">
+   591→   591→                  <span className="text-xs text-[var(--app-text-muted)]">月均</span>
+   592→   592→                  <span className="text-sm text-[var(--app-text-secondary)]">
+   593→   593→                    ¥{ANNUAL_PRICING[selectedPlan.id].monthlyEquivalent}/月
+   594→   594→                  </span>
+   595→   595→                </div>
+   596→   596→              )}
+   597→   597→            </div>
+   598→   598→
+   599→   599→            {/* Payment methods */}
+   600→   600→            <div className="space-y-2">
+   601→   601→              <p className="text-sm font-medium text-[var(--app-text-primary)]">选择支付方式</p>
+   602→   602→
+   603→   603→              {/* WeChat Pay */}
+   604→   604→              <button
+   605→   605→                onClick={() => setPaymentMethod('wechat')}
+   606→   606→                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all min-h-[48px] ${
+   607→   607→                  paymentMethod === 'wechat'
+   608→   608→                    ? 'border-[var(--app-accent)] bg-[var(--app-accent)]/5'
+   609→   609→                    : 'border-[var(--app-border)] bg-[var(--app-bg)] hover:border-[var(--app-accent)] hover:bg-[var(--app-accent)]/5'
+   610→   610→                }`}
+   611→   611→              >
+   612→   612→                <div className="size-10 rounded-lg bg-green-500/15 flex items-center justify-center shrink-0">
+   613→   613→                  <Smartphone className="size-5 text-green-600" />
+   614→   614→                </div>
+   615→   615→                <div className="flex-1 text-left">
+   616→   616→                  <p className="text-sm font-medium text-[var(--app-text-primary)]">微信支付</p>
+   617→   617→                  <p className="text-xs text-[var(--app-text-muted)]">推荐 · 扫码或跳转支付</p>
+   618→   618→                </div>
+   619→   619→                {paymentMethod === 'wechat' && (
+   620→   620→                  <Check className="size-4 text-[var(--app-accent)]" />
+   621→   621→                )}
+   622→   622→              </button>
+   623→   623→
+   624→   624→              {/* Alipay */}
+   625→   625→              <button
+   626→   626→                onClick={() => setPaymentMethod('alipay')}
+   627→   627→                className={`w-full flex items-center gap-3 p-3 rounded-xl border transition-all min-h-[48px] ${
+   628→   628→                  paymentMethod === 'alipay'
+   629→   629→                    ? 'border-[var(--app-accent)] bg-[var(--app-accent)]/5'
+   630→   630→                    : 'border-[var(--app-border)] bg-[var(--app-bg)] hover:border-[var(--app-accent)] hover:bg-[var(--app-accent)]/5'
+   631→   631→                }`}
+   632→   632→              >
+   633→   633→                <div className="size-10 rounded-lg bg-blue-500/15 flex items-center justify-center shrink-0">
+   634→   634→                  <CreditCard className="size-5 text-blue-600" />
+   635→   635→                </div>
+   636→   636→                <div className="flex-1 text-left">
+   637→   637→                  <p className="text-sm font-medium text-[var(--app-text-primary)]">支付宝</p>
+   638→   638→                  <p className="text-xs text-[var(--app-text-muted)]">扫码或跳转支付</p>
+   639→   639→                </div>
+   640→   640→                {paymentMethod === 'alipay' && (
+   641→   641→                  <Check className="size-4 text-[var(--app-accent)]" />
+   642→   642→                )}
+   643→   643→              </button>
+   644→   644→            </div>
+   645→   645→
+   646→   646→            {/* QR Code Placeholder Area */}
+   647→   647→            {paymentMethod && (
+   648→   648→              <motion.div
+   649→   649→                initial={{ opacity: 0, height: 0 }}
+   650→   650→                animate={{ opacity: 1, height: 'auto' }}
+   651→   651→                className="space-y-3"
+   652→   652→              >
+   653→   653→                <div className="bg-[var(--app-bg)] rounded-xl border border-[var(--app-border)] p-4">
+   654→   654→                  <div className="flex flex-col items-center gap-3">
+   655→   655→                    {/* QR Code placeholder */}
+   656→   656→                    <div className="w-40 h-40 rounded-xl border-2 border-dashed border-[var(--app-border)] flex flex-col items-center justify-center bg-[var(--app-bg-card)]">
+   657→   657→                      <QrCode className="size-12 text-[var(--app-text-muted)] mb-2" />
+   658→   658→                      <p className="text-xs text-[var(--app-text-muted)] font-medium">扫码支付</p>
+   659→   659→                    </div>
+   660→   660→                    <p className="text-xs text-[var(--app-text-muted)]">
+   661→   661→                      {paymentMethod === 'wechat' ? '请使用微信扫描二维码完成支付' : '请使用支付宝扫描二维码完成支付'}
+   662→   662→                    </p>
+   663→   663→                  </div>
+   664→   664→                </div>
+   665→   665→
+   666→   666→                {/* Or open payment link */}
+   667→   667→                <Button
+   668→   668→                  onClick={() => {
+   669→   669→                    const link = selectedPlan ? getPaymentLink(selectedPlan.id) : ''
+   670→   670→                    if (link) {
+   671→   671→                      window.open(link, '_blank')
+   672→   672→                    }
+   673→   673→                    setShowPaymentDialog(false)
+   674→   674→                    toast({
+   675→   675→                      title: '正在跳转支付',
+   676→   676→                      description: '请在支付页面完成付款后返回',
+   677→   677→                    })
+   678→   678→                  }}
+   679→   679→                  className="w-full bg-[var(--app-accent)] hover:bg-[var(--app-accent-hover)] text-white h-11 rounded-xl"
+   680→   680→                >
+   681→   681→                  <ExternalLink className="size-4 mr-2" />
+   682→   682→                  打开支付链接
+   683→   683→                </Button>
+   684→   684→              </motion.div>
+   685→   685→            )}
+   686→   686→
+   687→   687→            {/* Trust note */}
+   688→   688→            <div className="flex items-center justify-center gap-4 text-xs text-[var(--app-text-muted)] pt-2">
+   689→   689→              <div className="flex items-center gap-1">
+   690→   690→                <Check className="size-3 text-[var(--app-accent)]" />
+   691→   691→                <span>7天退款</span>
+   692→   692→              </div>
+   693→   693→              <div className="flex items-center gap-1">
+   694→   694→                <Check className="size-3 text-[var(--app-accent)]" />
+   695→   695→                <span>随时取消</span>
+   696→   696→              </div>
+   697→   697→              <div className="flex items-center gap-1">
+   698→   698→                <Check className="size-3 text-[var(--app-accent)]" />
+   699→   699→                <span>安全支付</span>
+   700→   700→              </div>
+   701→   701→            </div>
+   702→   702→          </div>
+   703→   703→        </DialogContent>
+   704→   704→      </Dialog>
+   705→   705→    </motion.div>
+   706→   706→  )
+   707→   707→}
+   708→   708→

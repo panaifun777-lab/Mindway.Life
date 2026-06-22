@@ -1,0 +1,40 @@
+:81 {
+        @transform_port_query {
+                query XTransformPort=*
+        }
+
+        handle @transform_port_query {
+                reverse_proxy localhost:{query.XTransformPort} {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+
+        # Serve static avatar files directly (reduces load on Node.js)
+        handle /avatars/* {
+                root * /home/z/my-project/public
+                file_server
+                header Cache-Control "public, max-age=86400"
+        }
+
+        # Serve Next.js static assets directly
+        handle /_next/static/* {
+                reverse_proxy localhost:3000 {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+
+        handle {
+                reverse_proxy localhost:3000 {
+                        header_up Host {host}
+                        header_up X-Forwarded-For {remote_host}
+                        header_up X-Forwarded-Proto {scheme}
+                        header_up X-Real-IP {remote_host}
+                }
+        }
+}
