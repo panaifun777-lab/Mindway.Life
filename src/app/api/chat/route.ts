@@ -116,12 +116,47 @@ export async function POST(request: NextRequest) {
     ];
 
     // Call LLM with streaming
-    const zai = await ZAI.create();
-    const stream = (await zai.chat.completions.create({
-      messages,
-      stream: true,
-      thinking: { type: "disabled" },
-    })) as ReadableStream<Uint8Array>;
+    let zai;
+    let stream: ReadableStream<Uint8Array>;
+    try {
+      zai = await ZAI.create();
+      stream = (await zai.chat.completions.create({
+        messages,
+        stream: true,
+        thinking: { type: "disabled" },
+      })) as ReadableStream<Uint8Array>;
+    } catch (apiErr) {
+      // ZAI API unavailable (network issue, config missing, etc.)
+      // Return a graceful fallback response based on philosopher's persona
+      console.error("ZAI API unavailable, using fallback:", apiErr);
+      const fallbackContent = philosopher.isHost
+        ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。让我想想，再给你一个更好的回答。`
+        : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}\n\n（AI 对话服务暂时不可用，这是基于${philosopher.nameCn}核心思想的预生成回应。）`;
+
+      const encoder = new TextEncoder();
+      const readable = new ReadableStream({
+        async start(controller) {
+          // Stream fallback content word by word
+          const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
+          for (const chunk of chunks) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
+            await new Promise(r => setTimeout(r, 30));
+          }
+          // Save to DB
+          try {
+            await db.message.create({
+              data: { conversationId: convId!, role: "assistant", content: fallbackContent },
+            });
+          } catch {}
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ conversationId: convId })}\n\n`));
+          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+      return new Response(readable, {
+        headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+      });
+    }
 
     // Create a TransformStream to parse upstream SSE and re-emit in our format
     const encoder = new TextEncoder();
