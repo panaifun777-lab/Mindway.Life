@@ -52,3 +52,11 @@ prompt
 server.log
 # Skills directory
 /skills/
+# Runtime data
+db/custom.db
+db/*.db-journal
+*.pid
+.zscripts/dev.pid
+
+# Upload temp
+upload/
