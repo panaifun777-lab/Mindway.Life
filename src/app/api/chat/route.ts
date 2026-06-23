@@ -245,9 +245,38 @@ export async function POST(request: NextRequest) {
     });
   } catch (error) {
     console.error("Chat API error:", error);
-    return new Response(
-      JSON.stringify({ error: "Failed to generate response" }),
-      { status: 500, headers: { "Content-Type": "application/json" } }
-    );
+    // Return fallback streaming response instead of 500 error
+    const fallbackContent = philosopher.isHost
+      ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。让我想想，再给你一个更好的回答。`
+      : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}\n\n（AI 对话服务暂时不可用，这是基于${philosopher.nameCn}核心思想的预生成回应。）`;
+    const enc = new TextEncoder();
+    let fallbackConvId = convId;
+    if (!fallbackConvId) {
+      try {
+        const c = await db.conversation.create({ data: { philosopherId, mode: "single" } });
+        fallbackConvId = c.id;
+      } catch {}
+    }
+    const finalConvId = fallbackConvId;
+    const readable = new ReadableStream({
+      async start(controller) {
+        const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
+        for (const chunk of chunks) {
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
+          await new Promise(r => setTimeout(r, 30));
+        }
+        try {
+          await db.message.create({
+            data: { conversationId: finalConvId!, role: "assistant", content: fallbackContent },
+          });
+        } catch {}
+        controller.enqueue(enc.encode(`data: ${JSON.stringify({ conversationId: finalConvId })}\n\n`));
+        controller.enqueue(enc.encode("data: [DONE]\n\n"));
+        controller.close();
+      },
+    });
+    return new Response(readable, {
+      headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
+    });
   }
 }
