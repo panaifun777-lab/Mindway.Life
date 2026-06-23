@@ -115,6 +115,32 @@ export async function POST(request: NextRequest) {
       { role: "user", content: message },
     ];
 
+    // Helper: generate fallback streaming response
+    const generateFallbackResponse = (philosopher: any, convId: string | undefined) => {
+      const fallbackContent = philosopher.isHost
+        ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。让我想想，再给你一个更好的回答。`
+        : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}\n\n（AI 对话服务暂时不可用，这是基于${philosopher.nameCn}核心思想的预生成回应。）`;
+
+      const enc = new TextEncoder();
+      return new ReadableStream({
+        async start(controller) {
+          const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
+          for (const chunk of chunks) {
+            controller.enqueue(enc.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
+            await new Promise(r => setTimeout(r, 30));
+          }
+          try {
+            await db.message.create({
+              data: { conversationId: convId!, role: "assistant", content: fallbackContent },
+            });
+          } catch {}
+          controller.enqueue(enc.encode(`data: ${JSON.stringify({ conversationId: convId })}\n\n`));
+          controller.enqueue(enc.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+    };
+
     // Call LLM with streaming
     let zai;
     let stream: ReadableStream<Uint8Array>;
@@ -127,32 +153,8 @@ export async function POST(request: NextRequest) {
       })) as ReadableStream<Uint8Array>;
     } catch (apiErr) {
       // ZAI API unavailable (network issue, config missing, etc.)
-      // Return a graceful fallback response based on philosopher's persona
       console.error("ZAI API unavailable, using fallback:", apiErr);
-      const fallbackContent = philosopher.isHost
-        ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。让我想想，再给你一个更好的回答。`
-        : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}\n\n（AI 对话服务暂时不可用，这是基于${philosopher.nameCn}核心思想的预生成回应。）`;
-
-      const encoder = new TextEncoder();
-      const readable = new ReadableStream({
-        async start(controller) {
-          // Stream fallback content word by word
-          const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
-          for (const chunk of chunks) {
-            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
-            await new Promise(r => setTimeout(r, 30));
-          }
-          // Save to DB
-          try {
-            await db.message.create({
-              data: { conversationId: convId!, role: "assistant", content: fallbackContent },
-            });
-          } catch {}
-          controller.enqueue(encoder.encode(`data: ${JSON.stringify({ conversationId: convId })}\n\n`));
-          controller.enqueue(encoder.encode("data: [DONE]\n\n"));
-          controller.close();
-        },
-      });
+      const readable = generateFallbackResponse(philosopher, convId);
       return new Response(readable, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
       });
@@ -163,6 +165,7 @@ export async function POST(request: NextRequest) {
     const decoder = new TextDecoder();
 
     let fullContent = ""; // Accumulate full content for DB save
+    let hasStreamedContent = false;
 
     const transformStream = new TransformStream({
       async transform(chunk, controller) {
@@ -177,16 +180,15 @@ export async function POST(request: NextRequest) {
 
           // Check for [DONE] from upstream
           if (dataStr === "[DONE]") {
-            continue; // We'll send our own [DONE] in the flush
+            continue;
           }
 
           try {
             const parsed = JSON.parse(dataStr);
-            // OpenAI-compatible format: choices[0].delta.content
             const content = parsed.choices?.[0]?.delta?.content;
             if (content) {
               fullContent += content;
-              // Re-emit in our SSE format
+              hasStreamedContent = true;
               controller.enqueue(
                 encoder.encode(`data: ${JSON.stringify({ content })}\n\n`)
               );
@@ -197,6 +199,19 @@ export async function POST(request: NextRequest) {
         }
       },
       async flush(controller) {
+        // If nothing was streamed (API failed mid-stream), use fallback
+        if (!hasStreamedContent) {
+          const fallbackContent = philosopher.isHost
+            ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。`
+            : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}`;
+          const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
+          for (const chunk of chunks) {
+            controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
+            await new Promise(r => setTimeout(r, 30));
+          }
+          fullContent = fallbackContent;
+        }
+
         // Save assistant message to DB
         if (fullContent) {
           try {
@@ -212,7 +227,6 @@ export async function POST(request: NextRequest) {
           }
         }
 
-        // Send conversation ID as final metadata before [DONE]
         controller.enqueue(
           encoder.encode(`data: ${JSON.stringify({ conversationId: convId })}\n\n`)
         );
