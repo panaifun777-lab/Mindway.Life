@@ -30,10 +30,10 @@ const PLANS = [
     id: 'pro',
     name: '专业版',
     nameEn: 'Pro',
-    price: 2900, // 29元 in fen
+    price: 4900, // 49元 in fen
     currency: 'CNY',
     interval: 'month',
-    priceDisplay: '¥29/月',
+    priceDisplay: '¥49/月',
     features: [
       '无限AI对话',
       '辩论场模式',

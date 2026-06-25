@@ -45,11 +45,11 @@ const PAYMENT_CONFIG = {
 // Annual pricing config (20% off monthly equivalent)
 const ANNUAL_PRICING: Record<string, { monthlyPrice: number; annualPrice: number; monthlyEquivalent: number; savings: number; display: string }> = {
   pro: {
-    monthlyPrice: 29,
-    annualPrice: 278,
-    monthlyEquivalent: 23,
+    monthlyPrice: 49,
+    annualPrice: 470,
+    monthlyEquivalent: 39,
     savings: 20,
-    display: '¥278/年',
+    display: '¥470/年',
   },
   premium: {
     monthlyPrice: 99,
@@ -78,8 +78,8 @@ const fallbackPlans: Plan[] = [
     id: 'pro',
     name: '专业版',
     nameEn: 'Pro',
-    price: 2900,
-    priceDisplay: '¥29/月',
+    price: 4900,
+    priceDisplay: '¥49/月',
     features: [
       '无限AI对话',
       '辩论场模式',
