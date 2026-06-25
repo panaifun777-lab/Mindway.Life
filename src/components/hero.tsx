@@ -17,6 +17,60 @@ export default function Hero() {
       </div>
 
       <div className="max-w-4xl mx-auto text-center relative z-10">
+        {/* Animated Logo */}
+        <motion.div
+          initial={{ opacity: 0, scale: 0.5, y: -20 }}
+          animate={{ opacity: 1, scale: 1, y: 0 }}
+          transition={{ duration: 0.8, ease: 'easeOut' }}
+          className="flex justify-center mb-8"
+        >
+          <div className="relative group">
+            {/* Glowing ring behind logo */}
+            <motion.div
+              animate={{
+                scale: [1, 1.08, 1],
+                opacity: [0.3, 0.5, 0.3],
+              }}
+              transition={{
+                duration: 3,
+                repeat: Infinity,
+                ease: 'easeInOut',
+              }}
+              className="absolute inset-0 rounded-full bg-[var(--app-accent)] blur-xl"
+            />
+            {/* Rotating ring */}
+            <motion.div
+              animate={{ rotate: 360 }}
+              transition={{
+                duration: 20,
+                repeat: Infinity,
+                ease: 'linear',
+              }}
+              className="absolute inset-0 rounded-full"
+              style={{
+                background: `conic-gradient(from 0deg, transparent, var(--app-accent), transparent, var(--app-accent), transparent)`,
+                opacity: 0.4,
+                padding: '2px',
+              }}
+            >
+              <div className="w-full h-full rounded-full bg-[var(--app-bg)]" />
+            </motion.div>
+            {/* Logo image */}
+            <motion.div
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.3 }}
+              className="relative w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 ring-[var(--app-accent)]/40 shadow-lg shadow-[var(--app-accent)]/20"
+            >
+              <img
+                src="/logo-main.png"
+                alt="Mindway.Life"
+                className="w-full h-full object-cover"
+              />
+              <div className="absolute inset-0 bg-gradient-to-tr from-[var(--app-accent)]/10 to-transparent" />
+            </motion.div>
+          </div>
+        </motion.div>
+
         {/* Ornamental top line */}
         <motion.div
           initial={{ scaleX: 0 }}
