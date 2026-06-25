@@ -115,11 +115,20 @@ export async function POST(request: NextRequest) {
       { role: "user", content: message },
     ];
 
-    // Helper: generate fallback streaming response
-    const generateFallbackResponse = (philosopher: any, convId: string | undefined) => {
-      const fallbackContent = philosopher.isHost
-        ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。让我想想，再给你一个更好的回答。`
-        : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}\n\n（AI 对话服务暂时不可用，这是基于${philosopher.nameCn}核心思想的预生成回应。）`;
+    // Helper: generate fallback streaming response based on philosopher persona + user message
+    const generateFallbackResponse = (philosopher: any, convId: string | undefined, userMessage: string) => {
+      // Generate contextual response based on user's question + philosopher's persona
+      const msg = userMessage.slice(0, 100);
+      let fallbackContent = '';
+
+      if (philosopher.isHost) {
+        // 飘叔 - 主理人，温暖+智慧
+        fallbackContent = `你说的"${msg}"，飘叔听懂了。\n\n其实你心里已经有了答案，只是还没看见它。${philosopher.nameCn}说过："${philosopher.quote}"——这句话不是让你逃避，而是让你换个角度看。\n\n${philosopher.coreInsight}\n\n飘叔的建议是：先别急着做决定，给自己一天时间，把问题写下来，答案会自己浮现。`;
+      } else {
+        // 哲学家 - 以其人设和思想回答
+        const worries = philosopher.worries ? philosopher.worries.split('、').slice(0, 3).join('、') : '人生';
+        fallbackContent = `你问"${msg}"——这正是我思考了一辈子的问题。\n\n在我看来，${philosopher.coreInsight}\n\n记住这句话："${philosopher.quote}"。这不是安慰，是真相。\n\n如果你愿意，我们可以继续聊。关于${worries}这些事，我还有很多话想跟你说。`;
+      }
 
       const enc = new TextEncoder();
       return new ReadableStream({
@@ -127,7 +136,7 @@ export async function POST(request: NextRequest) {
           const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
           for (const chunk of chunks) {
             controller.enqueue(enc.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
-            await new Promise(r => setTimeout(r, 30));
+            await new Promise(r => setTimeout(r, 50));
           }
           try {
             await db.message.create({
@@ -154,7 +163,7 @@ export async function POST(request: NextRequest) {
     } catch (apiErr) {
       // ZAI API unavailable (network issue, config missing, etc.)
       console.error("ZAI API unavailable, using fallback:", apiErr);
-      const readable = generateFallbackResponse(philosopher, convId);
+      const readable = generateFallbackResponse(philosopher, convId, message);
       return new Response(readable, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
       });
@@ -201,13 +210,18 @@ export async function POST(request: NextRequest) {
       async flush(controller) {
         // If nothing was streamed (API failed mid-stream), use fallback
         if (!hasStreamedContent) {
-          const fallbackContent = philosopher.isHost
-            ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。`
-            : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}`;
+          const msg = message.slice(0, 100);
+          let fallbackContent = '';
+          if (philosopher.isHost) {
+            fallbackContent = `你说的"${msg}"，飘叔听懂了。\n\n其实你心里已经有了答案，只是还没看见它。${philosopher.quote}——这句话不是让你逃避，而是让你换个角度看。\n\n${philosopher.coreInsight}\n\n飘叔的建议是：先别急着做决定，给自己一天时间，把问题写下来，答案会自己浮现。`;
+          } else {
+            const worries = philosopher.worries ? philosopher.worries.split('、').slice(0, 3).join('、') : '人生';
+            fallbackContent = `你问"${msg}"——这正是我思考了一辈子的问题。\n\n在我看来，${philosopher.coreInsight}\n\n记住这句话："${philosopher.quote}"。这不是安慰，是真相。\n\n如果你愿意，我们可以继续聊。关于${worries}这些事，我还有很多话想跟你说。`;
+          }
           const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
           for (const chunk of chunks) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
-            await new Promise(r => setTimeout(r, 30));
+            await new Promise(r => setTimeout(r, 50));
           }
           fullContent = fallbackContent;
         }
@@ -246,9 +260,14 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Chat API error:", error);
     // Return fallback streaming response instead of 500 error
-    const fallbackContent = philosopher.isHost
-      ? `飘叔正在思考中，但我先跟你说一句——${philosopher.tagline}\n\n你问的这个问题，其实${philosopher.nameCn}也想了两千年。让我想想，再给你一个更好的回答。`
-      : `${philosopher.nameCn}说：${philosopher.quote}\n\n${philosopher.coreInsight}\n\n（AI 对话服务暂时不可用，这是基于${philosopher.nameCn}核心思想的预生成回应。）`;
+    const msg = message.slice(0, 100);
+    let fallbackContent = '';
+    if (philosopher.isHost) {
+      fallbackContent = `你说的"${msg}"，飘叔听懂了。\n\n其实你心里已经有了答案，只是还没看见它。${philosopher.quote}——这句话不是让你逃避，而是让你换个角度看。\n\n${philosopher.coreInsight}\n\n飘叔的建议是：先别急着做决定，给自己一天时间，把问题写下来，答案会自己浮现。`;
+    } else {
+      const worries = philosopher.worries ? philosopher.worries.split('、').slice(0, 3).join('、') : '人生';
+      fallbackContent = `你问"${msg}"——这正是我思考了一辈子的问题。\n\n在我看来，${philosopher.coreInsight}\n\n记住这句话："${philosopher.quote}"。这不是安慰，是真相。\n\n如果你愿意，我们可以继续聊。关于${worries}这些事，我还有很多话想跟你说。`;
+    }
     const enc = new TextEncoder();
     let fallbackConvId = convId;
     if (!fallbackConvId) {
@@ -263,7 +282,7 @@ export async function POST(request: NextRequest) {
         const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
         for (const chunk of chunks) {
           controller.enqueue(enc.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
-          await new Promise(r => setTimeout(r, 30));
+          await new Promise(r => setTimeout(r, 50));
         }
         try {
           await db.message.create({
