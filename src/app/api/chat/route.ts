@@ -273,18 +273,8 @@ export async function POST(request: NextRequest) {
 
     // Helper: generate fallback streaming response based on philosopher persona + user message
     const generateFallbackResponse = (philosopher: any, convId: string | undefined, userMessage: string) => {
-      // Generate contextual response based on user's question + philosopher's persona
-      const msg = userMessage.slice(0, 100);
-      let fallbackContent = '';
-
-      if (philosopher.isHost) {
-        // 飘叔 - 主理人，温暖+智慧
-        fallbackContent = `你说的"${msg}"，飘叔听懂了。\n\n其实你心里已经有了答案，只是还没看见它。${philosopher.nameCn}说过："${philosopher.quote}"——这句话不是让你逃避，而是让你换个角度看。\n\n${philosopher.coreInsight}\n\n飘叔的建议是：先别急着做决定，给自己一天时间，把问题写下来，答案会自己浮现。`;
-      } else {
-        // 哲学家 - 以其人设和思想回答
-        const worries = philosopher.worries ? philosopher.worries.split('、').slice(0, 3).join('、') : '人生';
-        fallbackContent = `你问"${msg}"——这正是我思考了一辈子的问题。\n\n在我看来，${philosopher.coreInsight}\n\n记住这句话："${philosopher.quote}"。这不是安慰，是真相。\n\n如果你愿意，我们可以继续聊。关于${worries}这些事，我还有很多话想跟你说。`;
-      }
+      // 使用智能降级响应（根据问题类型+随机开场白，避免重复）
+      const fallbackContent = generateSmartFallback(philosopher, userMessage, philosopher.isHost);
 
       const enc = new TextEncoder();
       return new ReadableStream({
@@ -467,13 +457,7 @@ export async function POST(request: NextRequest) {
         // If nothing was streamed (API failed mid-stream), use fallback
         if (!hasStreamedContent) {
           const msg = message.slice(0, 100);
-          let fallbackContent = '';
-          if (philosopher.isHost) {
-            fallbackContent = `你说的"${msg}"，飘叔听懂了。\n\n其实你心里已经有了答案，只是还没看见它。${philosopher.quote}——这句话不是让你逃避，而是让你换个角度看。\n\n${philosopher.coreInsight}\n\n飘叔的建议是：先别急着做决定，给自己一天时间，把问题写下来，答案会自己浮现。`;
-          } else {
-            const worries = philosopher.worries ? philosopher.worries.split('、').slice(0, 3).join('、') : '人生';
-            fallbackContent = `你问"${msg}"——这正是我思考了一辈子的问题。\n\n在我看来，${philosopher.coreInsight}\n\n记住这句话："${philosopher.quote}"。这不是安慰，是真相。\n\n如果你愿意，我们可以继续聊。关于${worries}这些事，我还有很多话想跟你说。`;
-          }
+          const fallbackContent = generateSmartFallback(philosopher, message, philosopher.isHost);
           const chunks = fallbackContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [fallbackContent];
           for (const chunk of chunks) {
             controller.enqueue(encoder.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`));
@@ -542,13 +526,7 @@ export async function POST(request: NextRequest) {
     console.error("Chat API error:", error);
     // Return fallback streaming response instead of 500 error
     const msg = message.slice(0, 100);
-    let fallbackContent = '';
-    if (philosopher.isHost) {
-      fallbackContent = `你说的"${msg}"，飘叔听懂了。\n\n其实你心里已经有了答案，只是还没看见它。${philosopher.quote}——这句话不是让你逃避，而是让你换个角度看。\n\n${philosopher.coreInsight}\n\n飘叔的建议是：先别急着做决定，给自己一天时间，把问题写下来，答案会自己浮现。`;
-    } else {
-      const worries = philosopher.worries ? philosopher.worries.split('、').slice(0, 3).join('、') : '人生';
-      fallbackContent = `你问"${msg}"——这正是我思考了一辈子的问题。\n\n在我看来，${philosopher.coreInsight}\n\n记住这句话："${philosopher.quote}"。这不是安慰，是真相。\n\n如果你愿意，我们可以继续聊。关于${worries}这些事，我还有很多话想跟你说。`;
-    }
+    const fallbackContent = generateSmartFallback(philosopher, message, philosopher.isHost);
     const enc = new TextEncoder();
     let fallbackConvId = convId;
     if (!fallbackConvId) {
