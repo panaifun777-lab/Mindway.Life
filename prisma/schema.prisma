@@ -73,6 +73,7 @@ model User {
   updatedAt      DateTime @updatedAt
 
   subscriptions Subscription[]
+  insights      UserInsight[]
 
   @@map("users")
 }
@@ -95,4 +96,37 @@ model Subscription {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("subscriptions")
+}
+
+model UserInsight {
+  id                      String   @id @default(cuid())
+  userId                  String
+  corePain                String   @default("") // 核心痛点
+  cognitiveBlindSpots     String   @default("") // 认知盲区
+  valueTendency           String   @default("") // 价值观倾向
+  communicationPreference String   @default("") // 沟通偏好
+  emotionBaseline         String   @default("平静") // 情绪基线
+  insightSummary          String   @default("") // 洞察摘要(JSON字符串)
+  conversationCount       Int      @default(0) // 对话次数
+  lastAnalyzedAt          DateTime?
+  createdAt               DateTime @default(now())
+  updatedAt               DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("user_insights")
+}
+
+model CrisisLog {
+  id                   String   @id @default(cuid())
+  userId               String?  // 可为空，未登录用户也记录
+  userInput            String   // 触发熔断的用户输入
+  riskLevel            String   // safe / mild / severe
+  triggerKeywords      String   @default("") // 触发的敏感词(JSON数组)
+  interventionResponse String   // 熔断回复内容
+  hotlineShown         Boolean  @default(false) // 是否展示了热线
+  resolved             Boolean  @default(false) // 是否已处理
+  createdAt            DateTime @default(now())
+
+  @@map("crisis_logs")
 }

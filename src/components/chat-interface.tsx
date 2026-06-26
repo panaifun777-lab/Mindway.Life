@@ -10,6 +10,7 @@ import { useAppStore } from '@/lib/store'
 import { useQuery } from '@tanstack/react-query'
 import ReactMarkdown from 'react-markdown'
 import ThemeToggle from '@/components/theme-toggle'
+import CrisisCard from '@/components/crisis-card'
 
 interface Philosopher {
   id: string
@@ -44,6 +45,11 @@ export default function ChatInterface() {
   const [streamingContent, setStreamingContent] = useState('')
   const [conversationId, setConversationId] = useState<string | null>(null)
   const [copiedIdx, setCopiedIdx] = useState<number | null>(null)
+  // 危机干预热线卡片状态：后端 safety-gateway.ts 在 SSE 中返回 crisis:true 时触发
+  const [crisisInfo, setCrisisInfo] = useState<{ show: boolean; hotline: string }>({
+    show: false,
+    hotline: '',
+  })
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -176,6 +182,20 @@ export default function ChatInterface() {
 
           try {
             const parsed = JSON.parse(dataStr)
+
+            // ============================================================
+            // 危机干预安全网关 · 前端检测 (Safety Gateway Detection)
+            // ------------------------------------------------------------
+            // 后端 safety-gateway.ts 在 severe 级别情绪触发时，每个 SSE chunk
+            // 都会带 { content, crisis: true, hotline: "400-161-9995" }。
+            // 末尾还会再发一帧 { conversationId, crisis, hotline, riskLevel }
+            // 确保前端能拿到 hotline。此处检测到 crisis:true 即弹出热线卡片，
+            // 覆盖在聊天界面之上，强制用户看见援助资源。
+            // ============================================================
+            if (parsed.crisis === true && parsed.hotline) {
+              setCrisisInfo({ show: true, hotline: parsed.hotline })
+              // 不 continue：severe 帧 content 字段是飘叔干预话术，仍需正常累加显示在聊天气泡里
+            }
 
             // Handle conversation ID
             if (parsed.conversationId) {
@@ -483,6 +503,14 @@ export default function ChatInterface() {
           </Button>
         </div>
       </div>
+
+      {/* 危机干预热线卡片——覆盖在聊天界面上的模态层
+          由 SSE 中 crisis:true 字段触发，必须点"我知道了"才能关闭 */}
+      <CrisisCard
+        show={crisisInfo.show}
+        hotline={crisisInfo.hotline}
+        onClose={() => setCrisisInfo((prev) => ({ ...prev, show: false }))}
+      />
     </motion.div>
   )
 }

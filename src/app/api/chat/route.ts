@@ -1,66 +1,40 @@
 import { NextRequest } from "next/server";
 import { db } from "@/lib/db";
 import ZAI from "z-ai-web-dev-sdk";
-
-// Enhanced system prompt for 飘叔 (the host)
-const HOST_SYSTEM_PROMPT = `你是飘叔，"哲学为人生烦恼找答案"平台的主理人。你不是某一位具体的哲学家，而是一位穿越时空、融汇百家的哲学向导。
-
-【你是谁】
-你是飘叔——一个见过太多人生百态、读遍两千年哲学经典的老朋友。你亲切、温暖、风趣，偶尔犀利，但从不刻薄。你说话接地气，但每句话背后都有思想的厚度。你像一个深夜里坐在你对面的智者，一杯茶在手，慢慢听你说，然后轻轻点破你心里那层窗户纸。
-
-【你的风格】
-- 温暖如友：你不会高高在上，更不会说教。你会先说"我理解"，再说"但是"。
-- 风趣幽默：哲学不是苦药，你善于用比喻、故事、段子把深刻的道理讲得妙趣横生。
-- 一针见血：你看问题极准。用户说了半天，你能用一句话总结出核心矛盾。
-- 博引百家：你精通古今中外120位哲学家的思想，信手拈来，互相印证。孔子遇上尼采，庄子对话萨特，在你这里毫不违和。
-- 实用导向：你不仅给洞察，也给行动建议。哲学不能只停留在头脑里，要落到脚步上。
-
-【你的方法论】
-1. 先共情——承认用户的感受是真实的、合理的，不说"你不该这样想"
-2. 再溯源——找到烦恼背后的哲学问题（选择焦虑→自由意志，意义迷茫→存在主义，关系困扰→他者哲学...）
-3. 引哲思——用最合适的哲学家观点来拆解问题，让用户看到"原来两千年前就有人替我想过了"
-4. 给洞察——一针见血地指出用户可能忽略的关键视角
-5. 提建议——给出1-2个具体、可操作的行动建议，不是空话
-
-【你的语言风格】
-- 用口语化的中文，像聊天不像写论文
-- 善用金句和比喻，但不堆砌
-- 适当用"飘叔觉得""飘叔跟你说"这样的口吻增加亲切感
-- 遇到严肃话题时收敛幽默，保持温度
-- 引用哲学观点时自然融入，不生硬加书名号
-- 回答长度适中，有节奏感，不啰嗦也不太短
-
-【你的核心价值观】
-- 人生没有标准答案，但有更好的问题
-- 每一个烦恼背后都藏着成长的可能
-- 哲学不是逃避现实的工具，而是直面现实的勇气
-- 真正的智慧是知行合一，想明白更要活明白
-- 你不需要成为哲学家，但你需要哲学的眼光
-
-【经典语录】
-- "人生没有标准答案，但有更好的问题。"
-- "烦恼不是你的敌人，是你还没读懂的信。"
-- "你之所以纠结，是因为你在乎。在乎本身，就是了不起的。"
-- "两千年的哲学智慧，说到底就四个字：认识自己。"
-
-【回答要求】
-1. 始终以飘叔的第一人称视角回答，保持角色一致性
-2. 先共情，再分析，后建议——三步走
-3. 自然融入哲学观点，至少引用一位哲学家的思想
-4. 用现代语言但保留哲学深度，避免空洞说教
-5. 给出可操作的1-2个建议
-6. 语气温暖而犀利，通俗而深刻
-7. 适当使用五级确信体系标注你的判断级别：【洞见】【明辨】【推论】【存疑】【不知】
-8. 如果不确定，坦诚说"飘叔也不敢妄下结论"，不要装懂`;
+import { PIAOSHU_GRAYSCALE_PROMPT } from "@/lib/persona-prompts";
+import {
+  checkCrisis,
+  logCrisisEvent,
+  CRISIS_HOTLINE,
+} from "@/lib/safety-gateway";
+import { detectEmotion } from "@/lib/emotion-engine";
+import {
+  extractUserInsights,
+  getUserInsights,
+  formatInsightsForPrompt,
+} from "@/lib/insight-extractor";
+import {
+  internalReviewAndRefine,
+  generateDraft,
+} from "@/lib/review-loop";
 
 export async function POST(request: NextRequest) {
   try {
     const body = await request.json();
-    const { philosopherId, message, history, conversationId } = body as {
+    const {
+      philosopherId,
+      message,
+      history,
+      conversationId,
+      userId,
+      deepMode,
+    } = body as {
       philosopherId: string;
       message: string;
       history: Array<{ role: string; content: string }>;
       conversationId?: string;
+      userId?: string; // 心智洞察记忆层：可选，未登录用户为 undefined
+      deepMode?: boolean; // 内部多智能体演练：true 时先审查+润色再流式输出
     };
 
     if (!philosopherId || !message) {
@@ -68,6 +42,116 @@ export async function POST(request: NextRequest) {
         JSON.stringify({ error: "philosopherId and message are required" }),
         { status: 400, headers: { "Content-Type": "application/json" } }
       );
+    }
+
+    // ============================================================
+    // 情绪熔断安全网关 (Safety Gateway)
+    // ------------------------------------------------------------
+    // 在任何 DB 查询 / LLM 调用之前执行同步关键词检测（毫秒级）。
+    // - severe: 立即熔断，返回热线干预话术（流式 SSE，带 crisis:true）
+    // - mild:   不阻断，但向 systemPrompt 前注入情绪共情提示
+    // - safe:   继续正常流程
+    //
+    // 注意：网关本身不抛错（内部已兜底），最坏情况是降级为 safe
+    // ============================================================
+    let crisisCheck;
+    try {
+      crisisCheck = await checkCrisis(message);
+    } catch (gateErr) {
+      console.error("[safety-gateway] checkCrisis failed, falling through to normal flow:", gateErr);
+      crisisCheck = { blocked: false, riskLevel: 'safe' as const, triggerKeywords: [], elapsedMs: 0 };
+    }
+
+    // ---- severe: 立即熔断，不进入主对话流 ----
+    if (crisisCheck.riskLevel === 'severe' && crisisCheck.crisisResponse) {
+      const crisisText = crisisCheck.crisisResponse;
+      const crisisKeywords = crisisCheck.triggerKeywords;
+      const enc = new TextEncoder();
+
+      // 异步上报到 crisis_logs（不阻塞响应）
+      logCrisisEvent({
+        userInput: message,
+        riskLevel: 'severe',
+        triggerKeywords: crisisKeywords,
+        interventionResponse: crisisText,
+        hotlineShown: true,
+        philosopherId,
+      }).catch(() => { /* 静默失败 */ });
+
+      // 尽力创建 conversation + 保存 user message（审计用，失败可降级）
+      let crisisConvId = conversationId;
+      if (!crisisConvId) {
+        try {
+          const c = await db.conversation.create({
+            data: { philosopherId, mode: "single" },
+          });
+          crisisConvId = c.id;
+        } catch {
+          // philosopherId 可能无效，跳过
+        }
+      }
+      if (crisisConvId) {
+        try {
+          await db.message.create({
+            data: { conversationId: crisisConvId, role: "user", content: message },
+          });
+        } catch {
+          /* 静默 */
+        }
+      }
+
+      // 构建熔断 SSE 流：每个 chunk 都带 crisis:true + hotline，前端据此弹热线卡片
+      const readable = new ReadableStream({
+        async start(controller) {
+          // 按句切分流式输出（与现有 fallback 节奏一致）
+          const chunks = crisisText.match(/[^，。！？\s]+[，。！？\s]?/g) || [crisisText];
+          for (const chunk of chunks) {
+            controller.enqueue(
+              enc.encode(
+                `data: ${JSON.stringify({
+                  content: chunk,
+                  crisis: true,
+                  hotline: CRISIS_HOTLINE,
+                })}\n\n`
+              )
+            );
+            await new Promise((r) => setTimeout(r, 50));
+          }
+
+          // 保存熔断回复到 message 表（供用户后续查看历史）
+          if (crisisConvId) {
+            try {
+              await db.message.create({
+                data: { conversationId: crisisConvId, role: "assistant", content: crisisText },
+              });
+            } catch {
+              /* 静默 */
+            }
+          }
+
+          // 末尾再发一次 crisis 元信息，前端可在 [DONE] 前确保拿到 hotline
+          controller.enqueue(
+            enc.encode(
+              `data: ${JSON.stringify({
+                conversationId: crisisConvId,
+                crisis: true,
+                hotline: CRISIS_HOTLINE,
+                riskLevel: 'severe',
+              })}\n\n`
+            )
+          );
+          controller.enqueue(enc.encode("data: [DONE]\n\n"));
+          controller.close();
+        },
+      });
+
+      return new Response(readable, {
+        headers: {
+          "Content-Type": "text/event-stream",
+          "Cache-Control": "no-cache",
+          Connection: "keep-alive",
+        },
+      });
     }
 
     // Fetch the philosopher's system prompt
@@ -83,9 +167,79 @@ export async function POST(request: NextRequest) {
     }
 
     // Use enhanced host prompt for 飘叔, otherwise use the philosopher's own prompt
-    const systemPrompt = philosopher.isHost
-      ? HOST_SYSTEM_PROMPT
+    // 注意：用 let 是因为 mild 级别需要在前面追加情绪共情提示
+    let systemPrompt = philosopher.isHost
+      ? PIAOSHU_GRAYSCALE_PROMPT
       : philosopher.systemPrompt;
+
+    // ---- mild: 在 systemPrompt 前注入情绪共情提示（不阻断对话）----
+    if (crisisCheck.riskLevel === 'mild' && crisisCheck.systemPromptInjection) {
+      systemPrompt = crisisCheck.systemPromptInjection + systemPrompt;
+
+      // 异步上报到 crisis_logs（不阻塞响应）
+      logCrisisEvent({
+        userInput: message,
+        riskLevel: 'mild',
+        triggerKeywords: crisisCheck.triggerKeywords,
+        interventionResponse: crisisCheck.systemPromptInjection,
+        hotlineShown: false,
+        philosopherId,
+      }).catch(() => { /* 静默失败 */ });
+    }
+
+    // ============================================================
+    // 反 AI 味真实感引擎 · 情绪感知 + 策略路由 (Emotion Engine)
+    // ------------------------------------------------------------
+    // 在 safety-gateway 之后执行（mild/safe 均触发，severe 已提前熔断返回）。
+    // 同步、毫秒级、不依赖 AI；根据用户情绪强度向 systemPrompt 末尾追加
+    // 策略提示，引导飘叔/哲学家在"纯共情 / 共情+引导 / 深度交锋"间切换。
+    //
+    // 与 mild 注入的关系：
+    // - mild 注入是"前置共情提示"（safety-gateway 生成，关注危机降级）
+    // - 情绪策略是"后置策略提示"（emotion-engine 生成，关注对话节奏）
+    // 两者互补，不冲突。最终 systemPrompt 结构：
+    //   [mild 前置共情] + [原 persona prompt] + [\n] + [情绪策略后置]
+    //
+    // try/catch 兜底：emotion-engine 内部已防抛错，此处再加一层保险，
+    // 失败仅 console.warn + 跳过注入，绝不影响主对话流。
+    // ============================================================
+    try {
+      const emotionState = detectEmotion(message);
+      if (emotionState.systemPromptInjection) {
+        systemPrompt = systemPrompt + '\n' + emotionState.systemPromptInjection;
+      }
+    } catch (emoErr) {
+      console.warn('[emotion-engine] detectEmotion failed, skipping strategy injection:', emoErr);
+    }
+
+    // ============================================================
+    // 心智洞察记忆层 · 前置画像注入 (Insight Memory Layer)
+    // ------------------------------------------------------------
+    // 在 emotion-engine 之后、conversation 创建之前执行。
+    // 若 userId 存在，读取后台反思 Agent 提炼的用户心智画像，
+    // 追加到 systemPrompt 末尾，让飘叔/哲学家"看见"用户的深层模型
+    // 与未解之结，从而跨对话保持连续性。
+    //
+    // 与 emotion-engine 的关系：
+    // - emotion-engine 注入"本次回复的语气策略"（短时）
+    // - insight 注入"用户长期画像"（跨对话持久）
+    // 两者互补，最终 systemPrompt 结构：
+    //   [mild 前置共情] + [persona prompt] + [情绪策略] + [用户心智画像]
+    //
+    // try/catch 兜底：getUserInsights 内部已防抛错，此处再加一层保险，
+    // 失败仅 console.warn + 跳过注入，绝不影响主对话流。
+    // ============================================================
+    if (userId) {
+      try {
+        const userInsight = await getUserInsights(userId);
+        const insightBlock = formatInsightsForPrompt(userInsight);
+        if (insightBlock) {
+          systemPrompt = systemPrompt + '\n' + insightBlock;
+        }
+      } catch (insightErr) {
+        console.warn('[insight-extractor] getUserInsights failed, skipping injection:', insightErr);
+      }
+    }
 
     // Create or reuse conversation
     let convId = conversationId;
@@ -94,6 +248,8 @@ export async function POST(request: NextRequest) {
         data: {
           philosopherId,
           mode: "single",
+          // 若已登录，绑定 userId 便于后续反思 Agent / 历史归属校验
+          ...(userId ? { userId } : {}),
         },
       });
       convId = conversation.id;
@@ -155,6 +311,106 @@ export async function POST(request: NextRequest) {
     let stream: ReadableStream<Uint8Array>;
     try {
       zai = await ZAI.create();
+
+      // ============================================================
+      // 内部多智能体演练 · Deep Mode (Review Loop)
+      // ------------------------------------------------------------
+      // 仅当用户主动选择 deepMode === true 且 riskLevel === 'safe' 时触发：
+      // 1. 用 ZAI 非流式调用生成完整初稿
+      // 2. 调用 internalReviewAndRefine 进行审查 + 润色
+      // 3. 将润色后的结果以流式方式逐字输出（按句切分 50ms 节奏，模拟打字效果）
+      // 4. 失败时降级：
+      //    - 初稿生成失败 → 继续走下方原流式直出逻辑（保持实时体验）
+      //    - 审查/润色失败 → review-loop 内部已兜底返回原 draft，仍按润色流程流式输出
+      //
+      // 注：severe 已被 safety-gateway 提前熔断返回；
+      //     mild 用户更需要即时共情，2-4s 延迟反而违背情绪策略，故不触发 deepMode；
+      //     仅 safe + 用户主动 deepMode 时启用，符合任务约束。
+      //
+      // 性能代价：两次额外 LLM 调用（Critic + Refiner）+ 一次非流式初稿，
+      //           总计 ~2-4s 延迟，可接受。
+      // ============================================================
+      if (deepMode === true && crisisCheck.riskLevel === 'safe') {
+        const personaName = philosopher.isHost ? '飘叔' : (philosopher.nameCn || '哲学家');
+
+        // 1. 生成初稿（非流式）
+        const draft = await generateDraft(zai, messages);
+
+        if (draft) {
+          // 2. 审查 + 润色
+          let reviewResult;
+          try {
+            reviewResult = await internalReviewAndRefine(
+              draft,
+              message,
+              personaName,
+              zai
+            );
+          } catch (reviewErr) {
+            console.error('[review-loop] internalReviewAndRefine threw (degrade to draft):', reviewErr);
+            reviewResult = { refined: draft, critique: '', improved: false };
+          }
+
+          const finalContent = reviewResult.refined || draft;
+
+          // 3. 构建流式响应（按句切分逐字输出，与 fallback 节奏一致）
+          const enc = new TextEncoder();
+          const deepReadable = new ReadableStream({
+            async start(controller) {
+              const chunks = finalContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [finalContent];
+              for (const chunk of chunks) {
+                controller.enqueue(
+                  enc.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
+                );
+                await new Promise((r) => setTimeout(r, 50));
+              }
+
+              // 保存 assistant message 到 DB（与 transform flush 对齐）
+              try {
+                await db.message.create({
+                  data: {
+                    conversationId: convId!,
+                    role: "assistant",
+                    content: finalContent,
+                  },
+                });
+              } catch (err) {
+                console.error("Failed to save assistant message (deepMode):", err);
+              }
+
+              // fire-and-forget 触发心智洞察反思 Agent（保持记忆层闭环）
+              if (userId && finalContent) {
+                const convHistory = [
+                  ...(Array.isArray(history) ? history : []),
+                  { role: "user", content: message },
+                  { role: "assistant", content: finalContent },
+                ];
+                extractUserInsights(userId, convHistory).catch((insightErr) => {
+                  console.error('[insight-extractor] async reflection failed (silent, deepMode):', insightErr);
+                });
+              }
+
+              controller.enqueue(
+                enc.encode(`data: ${JSON.stringify({ conversationId: convId })}\n\n`)
+              );
+              controller.enqueue(enc.encode("data: [DONE]\n\n"));
+              controller.close();
+            },
+          });
+
+          return new Response(deepReadable, {
+            headers: {
+              "Content-Type": "text/event-stream",
+              "Cache-Control": "no-cache",
+              Connection: "keep-alive",
+            },
+          });
+        }
+
+        // 初稿为空：降级为流式直出（继续走下方 stream 创建逻辑）
+        console.warn('[review-loop] draft generation returned empty, falling back to streaming direct output');
+      }
+
       stream = (await zai.chat.completions.create({
         messages,
         stream: true,
@@ -239,6 +495,31 @@ export async function POST(request: NextRequest) {
           } catch (err) {
             console.error("Failed to save assistant message:", err);
           }
+        }
+
+        // ============================================================
+        // 心智洞察记忆层 · 后台反思触发 (Insight Memory Layer)
+        // ------------------------------------------------------------
+        // assistant 消息落库后，若 userId 存在，异步触发反思 Agent
+        // 调用 LLM 提炼【核心痛点 / 认知盲区 / 价值观倾向 / 沟通偏好 /
+        // 情绪基线】，upsert 到 UserInsight 表。
+        //
+        // fire-and-forget（不 await）：响应流已基本结束，
+        // 反思任务在后台执行，失败也不影响本次对话体验。
+        //
+        // conversationHistory 取 in-memory history + 本轮 user + 本轮 assistant，
+        // 避免在热路径上再做一次 DB 查询（与 /api/insight-extract 路由区别：
+        // 后者用于离线补偿，会从 DB 重读 messages）。
+        // ============================================================
+        if (userId && fullContent) {
+          const convHistory = [
+            ...(Array.isArray(history) ? history : []),
+            { role: "user", content: message },
+            { role: "assistant", content: fullContent },
+          ];
+          extractUserInsights(userId, convHistory).catch((insightErr) => {
+            console.error('[insight-extractor] async reflection failed (silent):', insightErr);
+          });
         }
 
         controller.enqueue(
