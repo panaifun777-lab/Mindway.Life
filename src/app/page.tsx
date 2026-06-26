@@ -67,7 +67,7 @@ function AppContent() {
                   className="font-serif font-bold text-[var(--app-text-primary)] text-sm hidden sm:inline"
                   style={{ fontFamily: 'Georgia, "Noto Serif SC", serif' }}
                 >
-                  哲学为人生烦恼找答案
+                  一段探寻智慧的心路历程
                 </span>
               </button>
               <div className="flex items-center gap-1">

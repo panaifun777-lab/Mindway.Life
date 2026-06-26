@@ -30,7 +30,7 @@ export default function Footer() {
           </button>
         </div>
         <p className="text-xs text-[var(--app-text-muted)] mt-4 opacity-60">
-          © 2024 飘叔工作室
+          © 2026 飘叔工作室
         </p>
       </div>
     </footer>
