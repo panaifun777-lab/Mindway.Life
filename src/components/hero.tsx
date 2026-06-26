@@ -59,15 +59,23 @@ export default function Hero() {
             <motion.div
               whileHover={{ scale: 1.05 }}
               transition={{ duration: 0.3 }}
-              className="relative w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 ring-[var(--app-accent)]/40 shadow-lg shadow-[var(--app-accent)]/20"
+              className="relative w-20 h-20 md:w-24 md:h-24 rounded-full overflow-hidden ring-2 ring-[var(--app-accent)]/40 shadow-lg shadow-[var(--app-accent)]/20 bg-[var(--app-accent)]/10"
             >
+              <img
+                src="/logo-preload.gif"
+                alt=""
+                className="absolute inset-0 w-full h-full object-cover"
+              />
               <video
                 src="/logo-animation.mp4"
                 autoPlay
                 loop
                 muted
                 playsInline
-                className="w-full h-full object-cover"
+                preload="auto"
+                className="relative w-full h-full object-cover"
+                style={{ opacity: 0, transition: 'opacity 0.3s' }}
+                onLoadedData={(e) => { (e.target as HTMLVideoElement).style.opacity = '1'; }}
               />
               <div className="absolute inset-0 bg-gradient-to-tr from-[var(--app-accent)]/10 to-transparent pointer-events-none" />
             </motion.div>

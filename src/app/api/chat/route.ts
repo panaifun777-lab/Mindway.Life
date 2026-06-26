@@ -9,6 +9,7 @@ import {
 } from "@/lib/safety-gateway";
 import { detectEmotion } from "@/lib/emotion-engine";
 import { generateSmartFallback } from "@/lib/smart-fallback";
+import { streamChatWithFallback, parseOpenAIStreamChunk } from "@/lib/llm-providers";
 import {
   extractUserInsights,
   getUserInsights,
@@ -297,119 +298,22 @@ export async function POST(request: NextRequest) {
       });
     };
 
-    // Call LLM with streaming
-    let zai;
+    // Call LLM with streaming - 使用多提供商适配层（智谱GLM-4-Flash > DeepSeek > ZAI隧道 > 降级）
     let stream: ReadableStream<Uint8Array>;
+    let providerName = '';
     try {
-      zai = await ZAI.create();
+      // 构建标准消息格式（OpenAI兼容）
+      const llmMessages: Array<{ role: string; content: string }> = [
+        ...(Array.isArray(history) ? history : []),
+        { role: "user", content: message },
+      ];
 
-      // ============================================================
-      // 内部多智能体演练 · Deep Mode (Review Loop)
-      // ------------------------------------------------------------
-      // 仅当用户主动选择 deepMode === true 且 riskLevel === 'safe' 时触发：
-      // 1. 用 ZAI 非流式调用生成完整初稿
-      // 2. 调用 internalReviewAndRefine 进行审查 + 润色
-      // 3. 将润色后的结果以流式方式逐字输出（按句切分 50ms 节奏，模拟打字效果）
-      // 4. 失败时降级：
-      //    - 初稿生成失败 → 继续走下方原流式直出逻辑（保持实时体验）
-      //    - 审查/润色失败 → review-loop 内部已兜底返回原 draft，仍按润色流程流式输出
-      //
-      // 注：severe 已被 safety-gateway 提前熔断返回；
-      //     mild 用户更需要即时共情，2-4s 延迟反而违背情绪策略，故不触发 deepMode；
-      //     仅 safe + 用户主动 deepMode 时启用，符合任务约束。
-      //
-      // 性能代价：两次额外 LLM 调用（Critic + Refiner）+ 一次非流式初稿，
-      //           总计 ~2-4s 延迟，可接受。
-      // ============================================================
-      if (deepMode === true && crisisCheck.riskLevel === 'safe') {
-        const personaName = philosopher.isHost ? '飘叔' : (philosopher.nameCn || '哲学家');
-
-        // 1. 生成初稿（非流式）
-        const draft = await generateDraft(zai, messages);
-
-        if (draft) {
-          // 2. 审查 + 润色
-          let reviewResult;
-          try {
-            reviewResult = await internalReviewAndRefine(
-              draft,
-              message,
-              personaName,
-              zai
-            );
-          } catch (reviewErr) {
-            console.error('[review-loop] internalReviewAndRefine threw (degrade to draft):', reviewErr);
-            reviewResult = { refined: draft, critique: '', improved: false };
-          }
-
-          const finalContent = reviewResult.refined || draft;
-
-          // 3. 构建流式响应（按句切分逐字输出，与 fallback 节奏一致）
-          const enc = new TextEncoder();
-          const deepReadable = new ReadableStream({
-            async start(controller) {
-              const chunks = finalContent.match(/[^，。！？\s]+[，。！？\s]?/g) || [finalContent];
-              for (const chunk of chunks) {
-                controller.enqueue(
-                  enc.encode(`data: ${JSON.stringify({ content: chunk })}\n\n`)
-                );
-                await new Promise((r) => setTimeout(r, 50));
-              }
-
-              // 保存 assistant message 到 DB（与 transform flush 对齐）
-              try {
-                await db.message.create({
-                  data: {
-                    conversationId: convId!,
-                    role: "assistant",
-                    content: finalContent,
-                  },
-                });
-              } catch (err) {
-                console.error("Failed to save assistant message (deepMode):", err);
-              }
-
-              // fire-and-forget 触发心智洞察反思 Agent（保持记忆层闭环）
-              if (userId && finalContent) {
-                const convHistory = [
-                  ...(Array.isArray(history) ? history : []),
-                  { role: "user", content: message },
-                  { role: "assistant", content: finalContent },
-                ];
-                extractUserInsights(userId, convHistory).catch((insightErr) => {
-                  console.error('[insight-extractor] async reflection failed (silent, deepMode):', insightErr);
-                });
-              }
-
-              controller.enqueue(
-                enc.encode(`data: ${JSON.stringify({ conversationId: convId })}\n\n`)
-              );
-              controller.enqueue(enc.encode("data: [DONE]\n\n"));
-              controller.close();
-            },
-          });
-
-          return new Response(deepReadable, {
-            headers: {
-              "Content-Type": "text/event-stream",
-              "Cache-Control": "no-cache",
-              Connection: "keep-alive",
-            },
-          });
-        }
-
-        // 初稿为空：降级为流式直出（继续走下方 stream 创建逻辑）
-        console.warn('[review-loop] draft generation returned empty, falling back to streaming direct output');
-      }
-
-      stream = (await zai.chat.completions.create({
-        messages,
-        stream: true,
-        thinking: { type: "disabled" },
-      })) as ReadableStream<Uint8Array>;
+      const result = await streamChatWithFallback(llmMessages, systemPrompt);
+      stream = result.stream;
+      providerName = result.provider;
     } catch (apiErr) {
-      // ZAI API unavailable (network issue, config missing, etc.)
-      console.error("ZAI API unavailable, using fallback:", apiErr);
+      // 所有LLM提供商都失败
+      console.error("All LLM providers unavailable, using fallback:", apiErr);
       const readable = generateFallbackResponse(philosopher, convId, message);
       return new Response(readable, {
         headers: { "Content-Type": "text/event-stream", "Cache-Control": "no-cache", Connection: "keep-alive" },
