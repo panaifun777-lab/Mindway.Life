@@ -8,6 +8,7 @@ import {
   CRISIS_HOTLINE,
 } from "@/lib/safety-gateway";
 import { detectEmotion } from "@/lib/emotion-engine";
+import { generateSmartFallback } from "@/lib/smart-fallback";
 import {
   extractUserInsights,
   getUserInsights,
@@ -525,8 +526,10 @@ export async function POST(request: NextRequest) {
   } catch (error) {
     console.error("Chat API error:", error);
     // Return fallback streaming response instead of 500 error
-    const msg = message.slice(0, 100);
-    const fallbackContent = generateSmartFallback(philosopher, message, philosopher.isHost);
+    // 注意：message 和 philosopher 可能在 catch 作用域外不可见，做安全处理
+    const safeMessage = typeof message !== 'undefined' ? message : '';
+    const safePhilosopher = typeof philosopher !== 'undefined' ? philosopher : { isHost: false, nameCn: '哲学家', quote: '思考是智慧的起点', coreInsight: '每一个问题都值得深思', worries: '' };
+    const fallbackContent = generateSmartFallback(safePhilosopher, safeMessage, safePhilosopher.isHost);
     const enc = new TextEncoder();
     let fallbackConvId = convId;
     if (!fallbackConvId) {
