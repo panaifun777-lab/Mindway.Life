@@ -56,12 +56,15 @@ function AppContent() {
                 className="flex items-center gap-2 hover:opacity-90 transition-opacity group"
               >
                 <div className="relative w-9 h-9 rounded-full overflow-hidden ring-2 ring-[var(--app-accent)]/30 group-hover:ring-[var(--app-accent)]/60 transition-all duration-300 group-hover:shadow-lg group-hover:shadow-[var(--app-accent)]/30">
-                  <img
-                    src="/logo-main.png"
-                    alt="Mindway.Life"
+                  <video
+                    src="/logo-animation.mp4"
+                    autoPlay
+                    loop
+                    muted
+                    playsInline
                     className="w-full h-full object-cover transition-transform duration-500 group-hover:scale-110"
                   />
-                  <div className="absolute inset-0 bg-gradient-to-tr from-[var(--app-accent)]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
+                  <div className="absolute inset-0 bg-gradient-to-tr from-[var(--app-accent)]/20 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none" />
                 </div>
                 <span
                   className="font-serif font-bold text-[var(--app-text-primary)] text-sm hidden sm:inline"
