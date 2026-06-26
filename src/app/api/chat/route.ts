@@ -435,10 +435,11 @@ export async function POST(request: NextRequest) {
     const safePhilosopher = typeof philosopher !== 'undefined' ? philosopher : { isHost: false, nameCn: '哲学家', quote: '思考是智慧的起点', coreInsight: '每一个问题都值得深思', worries: '' };
     const fallbackContent = generateSmartFallback(safePhilosopher, safeMessage, safePhilosopher.isHost);
     const enc = new TextEncoder();
-    let fallbackConvId = convId;
-    if (!fallbackConvId) {
+    let fallbackConvId = typeof convId !== 'undefined' ? convId : undefined;
+    const safePhilosopherId = typeof philosopherId !== 'undefined' ? philosopherId : '';
+    if (!fallbackConvId && safePhilosopherId) {
       try {
-        const c = await db.conversation.create({ data: { philosopherId, mode: "single" } });
+        const c = await db.conversation.create({ data: { philosopherId: safePhilosopherId, mode: "single" } });
         fallbackConvId = c.id;
       } catch {}
     }
