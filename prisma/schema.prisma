@@ -131,3 +131,57 @@ model CrisisLog {
 
   @@map("crisis_logs")
 }
+
+// ===== 运营管理相关模型 =====
+
+model SiteConfig {
+  id          String   @id @default("default")
+  siteName    String   @default("Mindway.Life")
+  announcement String  @default("") // 公告
+  bannerText  String   @default("") // Banner文字
+  bannerEnabled Boolean @default(false)
+  contactEmail String  @default("piaoshu@mindway.life")
+  llmProvider String   @default("zhipu") // zhipu / deepseek / zai
+  zhipuApiKey String   @default("")
+  deepseekApiKey String @default("")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@map("site_config")
+}
+
+model Coupon {
+  id          String   @id @default(cuid())
+  code        String   @unique // 优惠码
+  discountType String  // percentage / fixed
+  discountValue Int    // 百分比(如30=30%) 或 固定金额(分)
+  planId      String   @default("") // 适用套餐，空=全部
+  maxUses     Int      @default(100) // 最大使用次数
+  usedCount   Int      @default(0)
+  expiresAt   DateTime?
+  active      Boolean  @default(true)
+  createdAt   DateTime @default(now())
+
+  @@map("coupons")
+}
+
+model UserFavorite {
+  id            String   @id @default(cuid())
+  userId        String
+  philosopherId String
+  createdAt     DateTime @default(now())
+
+  @@unique([userId, philosopherId])
+  @@map("user_favorites")
+}
+
+model ConversationRating {
+  id            String   @id @default(cuid())
+  userId        String?
+  conversationId String
+  rating        Int      // 1-5 星
+  feedback      String   @default("")
+  createdAt     DateTime @default(now())
+
+  @@map("conversation_ratings")
+}

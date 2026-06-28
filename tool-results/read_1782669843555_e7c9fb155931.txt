@@ -1,0 +1,669 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useEffect } from 'react'
+     4→     4→import { motion } from 'framer-motion'
+     5→     5→import { LayoutDashboard, Users, MessageSquare, CreditCard, AlertTriangle, LogOut, Loader2, TrendingUp, DollarSign, Activity, Phone, Settings, BarChart3, Save, CheckCircle2, KeyRound, Megaphone, Mail } from 'lucide-react'
+     6→     6→import { Button } from '@/components/ui/button'
+     7→     7→import { Input } from '@/components/ui/input'
+     8→     8→import { Badge } from '@/components/ui/badge'
+     9→     9→import { Textarea } from '@/components/ui/textarea'
+    10→    10→import { Switch } from '@/components/ui/switch'
+    11→    11→
+    12→    12→interface AdminUser {
+    13→    13→  id: string
+    14→    14→  email: string
+    15→    15→  name: string
+    16→    16→  role: string
+    17→    17→  plan: string
+    18→    18→}
+    19→    19→
+    20→    20→interface Stats {
+    21→    21→  users: { total: number; pro: number; premium: number; free: number; today: number; dailyNew: Record<string, number> }
+    22→    22→  conversations: { total: number; today: number }
+    23→    23→  messages: { total: number; user: number; assistant: number; today: number }
+    24→    24→  subscriptions: { active: number; pending: number; revenue: number }
+    25→    25→  crisis: { total: number; severe: number; unresolved: number }
+    26→    26→  philosophers: { total: number; hosts: number }
+    27→    27→  insights: number
+    28→    28→  recentConversations: Array<{ id: string; philosopherName: string; philosopherAvatar: string; messageCount: number; createdAt: string; mode: string }>
+    29→    29→}
+    30→    30→
+    31→    31→interface SiteConfig {
+    32→    32→  id: string
+    33→    33→  siteName: string
+    34→    34→  announcement: string
+    35→    35→  bannerText: string
+    36→    36→  bannerEnabled: boolean
+    37→    37→  contactEmail: string
+    38→    38→  llmProvider: 'zhipu' | 'deepseek' | 'zai'
+    39→    39→  zhipuApiKey: string
+    40→    40→  deepseekApiKey: string
+    41→    41→  zhipuApiKeySet: boolean
+    42→    42→  deepseekApiKeySet: boolean
+    43→    43→  updatedAt?: string
+    44→    44→}
+    45→    45→
+    46→    46→interface Analytics {
+    47→    47→  generatedAt: string
+    48→    48→  dailyConversationTrend: Array<{ date: string; count: number }>
+    49→    49→  dailyMessageTrend: Array<{ date: string; count: number }>
+    50→    50→  topPhilosophers: Array<{
+    51→    51→    rank: number
+    52→    52→    philosopherId: string
+    53→    53→    name: string
+    54→    54→    nameEn: string
+    55→    55→    avatarUrl: string
+    56→    56→    era: string
+    57→    57→    category: string
+    58→    58→    conversationCount: number
+    59→    59→  }>
+    60→    60→  retention: {
+    61→    61→    d1: { rate: number; retained: number; eligible: number }
+    62→    62→    d7: { rate: number; retained: number; eligible: number }
+    63→    63→    d30: { rate: number; retained: number; eligible: number }
+    64→    64→  }
+    65→    65→  funnel: {
+    66→    66→    registered: number
+    67→    67→    conversed: number
+    68→    68→    subscribed: number
+    69→    69→    convRateRegToConv: number
+    70→    70→    convRateConvToSub: number
+    71→    71→    convRateOverall: number
+    72→    72→  }
+    73→    73→  apiCost: {
+    74→    74→    totalMessages: number
+    75→    75→    userMessages: number
+    76→    76→    assistantMessages: number
+    77→    77→    costPerMessage: number
+    78→    78→    estimatedCostCny: number
+    79→    79→  }
+    80→    80→}
+    81→    81→
+    82→    82→export default function AdminPanel() {
+    83→    83→  const [authenticated, setAuthenticated] = useState(false)
+    84→    84→  const [loading, setLoading] = useState(true)
+    85→    85→  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+    86→    86→  const [loginError, setLoginError] = useState('')
+    87→    87→  const [stats, setStats] = useState<Stats | null>(null)
+    88→    88→  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'subscriptions' | 'crisis' | 'settings' | 'analytics'>('dashboard')
+    89→    89→  const [users, setUsers] = useState<any[]>([])
+    90→    90→  const [subscriptions, setSubscriptions] = useState<any[]>([])
+    91→    91→  const [crisisLogs, setCrisisLogs] = useState<any[]>([])
+    92→    92→  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
+    93→    93→  const [configForm, setConfigForm] = useState<{
+    94→    94→    siteName: string
+    95→    95→    announcement: string
+    96→    96→    bannerText: string
+    97→    97→    bannerEnabled: boolean
+    98→    98→    contactEmail: string
+    99→    99→    llmProvider: 'zhipu' | 'deepseek' | 'zai'
+   100→   100→    zhipuApiKey: string
+   101→   101→    deepseekApiKey: string
+   102→   102→  }>({
+   103→   103→    siteName: '',
+   104→   104→    announcement: '',
+   105→   105→    bannerText: '',
+   106→   106→    bannerEnabled: false,
+   107→   107→    contactEmail: '',
+   108→   108→    llmProvider: 'zhipu',
+   109→   109→    zhipuApiKey: '',
+   110→   110→    deepseekApiKey: '',
+   111→   111→  })
+   112→   112→  const [configSaving, setConfigSaving] = useState(false)
+   113→   113→  const [configSaved, setConfigSaved] = useState(false)
+   114→   114→  const [configError, setConfigError] = useState('')
+   115→   115→  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+   116→   116→  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+   117→   117→
+   118→   118→  // 检查登录状态
+   119→   119→  useEffect(() => {
+   120→   120→    fetch('/api/admin/login').then(res => res.json()).then(data => {
+   121→   121→      if (data.authenticated) {
+   122→   122→        setAuthenticated(true)
+   123→   123→        loadStats()
+   124→   124→      }
+   125→   125→      setLoading(false)
+   126→   126→    }).catch(() => setLoading(false))
+   127→   127→  }, [])
+   128→   128→
+   129→   129→  const handleLogin = async (e: React.FormEvent) => {
+   130→   130→    e.preventDefault()
+   131→   131→    setLoginError('')
+   132→   132→    try {
+   133→   133→      const res = await fetch('/api/admin/login', {
+   134→   134→        method: 'POST',
+   135→   135→        headers: { 'Content-Type': 'application/json' },
+   136→   136→        body: JSON.stringify(loginForm),
+   137→   137→      })
+   138→   138→      const data = await res.json()
+   139→   139→      if (res.ok) {
+   140→   140→        setAuthenticated(true)
+   141→   141→        loadStats()
+   142→   142→      } else {
+   143→   143→        setLoginError(data.error || '登录失败')
+   144→   144→      }
+   145→   145→    } catch {
+   146→   146→      setLoginError('网络错误')
+   147→   147→    }
+   148→   148→  }
+   149→   149→
+   150→   150→  const handleLogout = async () => {
+   151→   151→    await fetch('/api/admin/login', { method: 'DELETE' }).catch(() => {})
+   152→   152→    document.cookie = 'admin_token=; path=/; max-age=0'
+   153→   153→    setAuthenticated(false)
+   154→   154→    setStats(null)
+   155→   155→  }
+   156→   156→
+   157→   157→  const loadStats = async () => {
+   158→   158→    try {
+   159→   159→      const res = await fetch('/api/admin/stats')
+   160→   160→      if (res.ok) setStats(await res.json())
+   161→   161→    } catch {}
+   162→   162→  }
+   163→   163→
+   164→   164→  const loadUsers = async () => {
+   165→   165→    try {
+   166→   166→      const res = await fetch('/api/admin/users')
+   167→   167→      if (res.ok) {
+   168→   168→        const data = await res.json()
+   169→   169→        setUsers(data.users)
+   170→   170→      }
+   171→   171→    } catch {}
+   172→   172→  }
+   173→   173→
+   174→   174→  const loadSubscriptions = async () => {
+   175→   175→    try {
+   176→   176→      const res = await fetch('/api/admin/subscriptions')
+   177→   177→      if (res.ok) {
+   178→   178→        const data = await res.json()
+   179→   179→        setSubscriptions(data.subscriptions)
+   180→   180→      }
+   181→   181→    } catch {}
+   182→   182→  }
+   183→   183→
+   184→   184→  const loadCrisisLogs = async () => {
+   185→   185→    try {
+   186→   186→      const res = await fetch('/api/admin/crisis-logs')
+   187→   187→      if (res.ok) {
+   188→   188→        const data = await res.json()
+   189→   189→        setCrisisLogs(data.logs)
+   190→   190→      }
+   191→   191→    } catch {}
+   192→   192→  }
+   193→   193→
+   194→   194→  const loadSiteConfig = async () => {
+   195→   195→    try {
+   196→   196→      const res = await fetch('/api/admin/site-config')
+   197→   197→      if (res.ok) {
+   198→   198→        const data = await res.json()
+   199→   199→        const cfg = data.config as SiteConfig
+   200→   200→        setSiteConfig(cfg)
+   201→   201→        setConfigForm({
+   202→   202→          siteName: cfg.siteName || '',
+   203→   203→          announcement: cfg.announcement || '',
+   204→   204→          bannerText: cfg.bannerText || '',
+   205→   205→          bannerEnabled: !!cfg.bannerEnabled,
+   206→   206→          contactEmail: cfg.contactEmail || '',
+   207→   207→          llmProvider: cfg.llmProvider || 'zhipu',
+   208→   208→          zhipuApiKey: cfg.zhipuApiKey || '',
+   209→   209→          deepseekApiKey: cfg.deepseekApiKey || '',
+   210→   210→        })
+   211→   211→      }
+   212→   212→    } catch {}
+   213→   213→  }
+   214→   214→
+   215→   215→  const saveSiteConfig = async () => {
+   216→   216→    setConfigSaving(true)
+   217→   217→    setConfigSaved(false)
+   218→   218→    setConfigError('')
+   219→   219→    try {
+   220→   220→      const res = await fetch('/api/admin/site-config', {
+   221→   221→        method: 'PUT',
+   222→   222→        headers: { 'Content-Type': 'application/json' },
+   223→   223→        body: JSON.stringify(configForm),
+   224→   224→      })
+   225→   225→      const data = await res.json()
+   226→   226→      if (res.ok) {
+   227→   227→        const cfg = data.config as SiteConfig
+   228→   228→        setSiteConfig(cfg)
+   229→   229→        setConfigSaved(true)
+   230→   230→        setTimeout(() => setConfigSaved(false), 3000)
+   231→   231→      } else {
+   232→   232→        setConfigError(data.error || '保存失败')
+   233→   233→      }
+   234→   234→    } catch {
+   235→   235→      setConfigError('网络错误')
+   236→   236→    } finally {
+   237→   237→      setConfigSaving(false)
+   238→   238→    }
+   239→   239→  }
+   240→   240→
+   241→   241→  const loadAnalytics = async () => {
+   242→   242→    setAnalyticsLoading(true)
+   243→   243→    try {
+   244→   244→      const res = await fetch('/api/admin/analytics')
+   245→   245→      if (res.ok) setAnalytics(await res.json())
+   246→   246→    } catch {} finally {
+   247→   247→      setAnalyticsLoading(false)
+   248→   248→    }
+   249→   249→  }
+   250→   250→
+   251→   251→  useEffect(() => {
+   252→   252→    if (authenticated) {
+   253→   253→      if (activeTab === 'users') loadUsers()
+   254→   254→      else if (activeTab === 'subscriptions') loadSubscriptions()
+   255→   255→      else if (activeTab === 'crisis') loadCrisisLogs()
+   256→   256→      else if (activeTab === 'settings') loadSiteConfig()
+   257→   257→      else if (activeTab === 'analytics') loadAnalytics()
+   258→   258→      else loadStats()
+   259→   259→    }
+   260→   260→  }, [activeTab, authenticated])
+   261→   261→
+   262→   262→  if (loading) {
+   263→   263→    return (
+   264→   264→      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+   265→   265→        <Loader2 className="size-8 animate-spin text-gray-400" />
+   266→   266→      </div>
+   267→   267→    )
+   268→   268→  }
+   269→   269→
+   270→   270→  if (!authenticated) {
+   271→   271→    return (
+   272→   272→      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 p-4">
+   273→   273→        <motion.div
+   274→   274→          initial={{ opacity: 0, y: 20 }}
+   275→   275→          animate={{ opacity: 1, y: 0 }}
+   276→   276→          className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8"
+   277→   277→        >
+   278→   278→          <div className="text-center mb-8">
+   279→   279→            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center mx-auto mb-4">
+   280→   280→              <LayoutDashboard className="size-8 text-white" />
+   281→   281→            </div>
+   282→   282→            <h1 className="text-2xl font-bold text-gray-900">Mindway 管理后台</h1>
+   283→   283→            <p className="text-sm text-gray-500 mt-2">请输入管理员账号登录</p>
+   284→   284→          </div>
+   285→   285→          <form onSubmit={handleLogin} className="space-y-4">
+   286→   286→            <div>
+   287→   287→              <label className="text-sm font-medium text-gray-700 mb-1 block">管理员邮箱</label>
+   288→   288→              <Input
+   289→   289→                type="email"
+   290→   290→                value={loginForm.email}
+   291→   291→                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+   292→   292→                placeholder="piaoshu@mindway.life"
+   293→   293→                required
+   294→   294→                className="h-11"
+   295→   295→              />
+   296→   296→            </div>
+   297→   297→            <div>
+   298→   298→              <label className="text-sm font-medium text-gray-700 mb-1 block">密码</label>
+   299→   299→              <Input
+   300→   300→                type="password"
+   301→   301→                value={loginForm.password}
+   302→   302→                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+   303→   303→                placeholder="••••••••"
+   304→   304→                required
+   305→   305→                className="h-11"
+   306→   306→              />
+   307→   307→            </div>
+   308→   308→            {loginError && (
+   309→   309→              <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{loginError}</div>
+   310→   310→            )}
+   311→   311→            <Button type="submit" className="w-full h-11 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white">
+   312→   312→              登录管理后台
+   313→   313→            </Button>
+   314→   314→          </form>
+   315→   315→          <div className="mt-6 text-center text-xs text-gray-400">
+   316→   316→            <p>测试账号：piaoshu@mindway.life</p>
+   317→   317→            <p>密码：Gai16999</p>
+   318→   318→          </div>
+   319→   319→        </motion.div>
+   320→   320→      </div>
+   321→   321→    )
+   322→   322→  }
+   323→   323→
+   324→   324→  return (
+   325→   325→    <div className="min-h-screen bg-gray-50">
+   326→   326→      {/* 顶栏 */}
+   327→   327→      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+   328→   328→        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+   329→   329→          <div className="flex items-center gap-3">
+   330→   330→            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center">
+   331→   331→              <LayoutDashboard className="size-4 text-white" />
+   332→   332→            </div>
+   333→   333→            <div>
+   334→   334→              <h1 className="font-bold text-gray-900">Mindway 管理后台</h1>
+   335→   335→              <p className="text-xs text-gray-500">mindway.life · 运营管理</p>
+   336→   336→            </div>
+   337→   337→          </div>
+   338→   338→          <div className="flex items-center gap-2">
+   339→   339→            <a href="https://mindway.life" target="_blank" rel="noopener noreferrer">
+   340→   340→              <Button variant="outline" size="sm">访问前台</Button>
+   341→   341→            </a>
+   342→   342→            <Button variant="ghost" size="sm" onClick={handleLogout}>
+   343→   343→              <LogOut className="size-4 mr-1" /> 退出
+   344→   344→            </Button>
+   345→   345→          </div>
+   346→   346→        </div>
+   347→   347→      </header>
+   348→   348→
+   349→   349→      {/* Tab栏 */}
+   350→   350→      <div className="bg-white border-b border-gray-200">
+   351→   351→        <div className="max-w-7xl mx-auto px-4 flex gap-1">
+   352→   352→          {[
+   353→   353→            { id: 'dashboard', label: '数据概览', icon: TrendingUp },
+   354→   354→            { id: 'analytics', label: '数据分析', icon: BarChart3 },
+   355→   355→            { id: 'users', label: '用户管理', icon: Users },
+   356→   356→            { id: 'subscriptions', label: '订阅支付', icon: CreditCard },
+   357→   357→            { id: 'crisis', label: '危机干预', icon: AlertTriangle },
+   358→   358→            { id: 'settings', label: '系统设置', icon: Settings },
+   359→   359→          ].map(tab => {
+   360→   360→            const Icon = tab.icon
+   361→   361→            return (
+   362→   362→              <button
+   363→   363→                key={tab.id}
+   364→   364→                onClick={() => setActiveTab(tab.id as any)}
+   365→   365→                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+   366→   366→                  activeTab === tab.id
+   367→   367→                    ? 'border-amber-600 text-amber-700'
+   368→   368→                    : 'border-transparent text-gray-500 hover:text-gray-700'
+   369→   369→                }`}
+   370→   370→              >
+   371→   371→                <Icon className="size-4" />
+   372→   372→                {tab.label}
+   373→   373→              </button>
+   374→   374→            )
+   375→   375→          })}
+   376→   376→        </div>
+   377→   377→      </div>
+   378→   378→
+   379→   379→      {/* 内容区 */}
+   380→   380→      <main className="max-w-7xl mx-auto px-4 py-6">
+   381→   381→        {/* Dashboard */}
+   382→   382→        {activeTab === 'dashboard' && stats && (
+   383→   383→          <div className="space-y-6">
+   384→   384→            {/* 核心指标卡片 */}
+   385→   385→            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   386→   386→              <StatCard icon={Users} label="总用户数" value={stats.users.total} sub={`今日 +${stats.users.today}`} color="blue" />
+   387→   387→              <StatCard icon={MessageSquare} label="对话总数" value={stats.conversations.total} sub={`今日 +${stats.conversations.today}`} color="green" />
+   388→   388→              <StatCard icon={Activity} label="消息总数" value={stats.messages.total} sub={`今日 +${stats.messages.today}`} color="purple" />
+   389→   389→              <StatCard icon={DollarSign} label="活跃订阅" value={stats.subscriptions.active} sub={`收入 ¥${(stats.subscriptions.revenue / 100).toFixed(2)}`} color="amber" />
+   390→   390→            </div>
+   391→   391→
+   392→   392→            {/* 用户分布 */}
+   393→   393→            <div className="grid md:grid-cols-2 gap-6">
+   394→   394→              <div className="bg-white rounded-xl border border-gray-200 p-6">
+   395→   395→                <h3 className="font-bold text-gray-900 mb-4">用户套餐分布</h3>
+   396→   396→                <div className="space-y-3">
+   397→   397→                  <div className="flex items-center justify-between">
+   398→   398→                    <span className="text-sm text-gray-600">免费版</span>
+   399→   399→                    <div className="flex items-center gap-2">
+   400→   400→                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+   401→   401→                        <div className="h-full bg-gray-400" style={{ width: `${(stats.users.free / stats.users.total) * 100}%` }} />
+   402→   402→                      </div>
+   403→   403→                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{stats.users.free}</span>
+   404→   404→                    </div>
+   405→   405→                  </div>
+   406→   406→                  <div className="flex items-center justify-between">
+   407→   407→                    <span className="text-sm text-gray-600">专业版 ¥49/月</span>
+   408→   408→                    <div className="flex items-center gap-2">
+   409→   409→                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+   410→   410→                        <div className="h-full bg-amber-500" style={{ width: `${(stats.users.pro / stats.users.total) * 100}%` }} />
+   411→   411→                      </div>
+   412→   412→                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{stats.users.pro}</span>
+   413→   413→                    </div>
+   414→   414→                  </div>
+   415→   415→                  <div className="flex items-center justify-between">
+   416→   416→                    <span className="text-sm text-gray-600">旗舰版 ¥99/月</span>
+   417→   417→                    <div className="flex items-center gap-2">
+   418→   418→                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+   419→   419→                        <div className="h-full bg-amber-700" style={{ width: `${(stats.users.premium / stats.users.total) * 100}%` }} />
+   420→   420→                      </div>
+   421→   421→                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{stats.users.premium}</span>
+   422→   422→                    </div>
+   423→   423→                  </div>
+   424→   424→                </div>
+   425→   425→              </div>
+   426→   426→
+   427→   427→              <div className="bg-white rounded-xl border border-gray-200 p-6">
+   428→   428→                <h3 className="font-bold text-gray-900 mb-4">危机干预统计</h3>
+   429→   429→                <div className="grid grid-cols-3 gap-4">
+   430→   430→                  <div className="text-center">
+   431→   431→                    <p className="text-2xl font-bold text-gray-900">{stats.crisis.total}</p>
+   432→   432→                    <p className="text-xs text-gray-500 mt-1">总触发</p>
+   433→   433→                  </div>
+   434→   434→                  <div className="text-center">
+   435→   435→                    <p className="text-2xl font-bold text-red-600">{stats.crisis.severe}</p>
+   436→   436→                    <p className="text-xs text-gray-500 mt-1">严重级别</p>
+   437→   437→                  </div>
+   438→   438→                  <div className="text-center">
+   439→   439→                    <p className="text-2xl font-bold text-orange-600">{stats.crisis.unresolved}</p>
+   440→   440→                    <p className="text-xs text-gray-500 mt-1">待处理</p>
+   441→   441→                  </div>
+   442→   442→                </div>
+   443→   443→                {stats.crisis.unresolved > 0 && (
+   444→   444→                  <div className="mt-4 p-3 bg-red-50 rounded-lg">
+   445→   445→                    <p className="text-sm text-red-700">
+   446→   446→                      ⚠️ 有 {stats.crisis.unresolved} 条危机记录待处理，请前往"危机干预"查看
+   447→   447→                    </p>
+   448→   448→                  </div>
+   449→   449→                )}
+   450→   450→              </div>
+   451→   451→            </div>
+   452→   452→
+   453→   453→            {/* API调用统计 */}
+   454→   454→            <div className="bg-white rounded-xl border border-gray-200 p-6">
+   455→   455→              <h3 className="font-bold text-gray-900 mb-4">API调用统计（消息量）</h3>
+   456→   456→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   457→   457→                <div>
+   458→   458→                  <p className="text-xs text-gray-500">用户消息</p>
+   459→   459→                  <p className="text-xl font-bold text-gray-900">{stats.messages.user}</p>
+   460→   460→                </div>
+   461→   461→                <div>
+   462→   462→                  <p className="text-xs text-gray-500">AI回复</p>
+   463→   463→                  <p className="text-xl font-bold text-gray-900">{stats.messages.assistant}</p>
+   464→   464→                </div>
+   465→   465→                <div>
+   466→   466→                  <p className="text-xs text-gray-500">哲学家数</p>
+   467→   467→                  <p className="text-xl font-bold text-gray-900">{stats.philosophers.total}</p>
+   468→   468→                </div>
+   469→   469→                <div>
+   470→   470→                  <p className="text-xs text-gray-500">心智洞察</p>
+   471→   471→                  <p className="text-xl font-bold text-gray-900">{stats.insights}</p>
+   472→   472→                </div>
+   473→   473→              </div>
+   474→   474→            </div>
+   475→   475→
+   476→   476→            {/* 最近对话 */}
+   477→   477→            <div className="bg-white rounded-xl border border-gray-200 p-6">
+   478→   478→              <h3 className="font-bold text-gray-900 mb-4">最近对话</h3>
+   479→   479→              <div className="space-y-2 max-h-64 overflow-y-auto">
+   480→   480→                {stats.recentConversations.map(conv => (
+   481→   481→                  <div key={conv.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
+   482→   482→                    {conv.philosopherAvatar && (
+   483→   483→                      <img src={conv.philosopherAvatar} alt="" className="size-8 rounded-full" />
+   484→   484→                    )}
+   485→   485→                    <div className="flex-1 min-w-0">
+   486→   486→                      <p className="text-sm font-medium text-gray-900">{conv.philosopherName}</p>
+   487→   487→                      <p className="text-xs text-gray-500">
+   488→   488→                        {conv.messageCount} 条消息 · {new Date(conv.createdAt).toLocaleString('zh-CN')}
+   489→   489→                      </p>
+   490→   490→                    </div>
+   491→   491→                    <Badge variant={conv.mode === 'debate' ? 'default' : 'secondary'} className="text-xs">
+   492→   492→                      {conv.mode === 'debate' ? '辩论' : '对话'}
+   493→   493→                    </Badge>
+   494→   494→                  </div>
+   495→   495→                ))}
+   496→   496→              </div>
+   497→   497→            </div>
+   498→   498→          </div>
+   499→   499→        )}
+   500→   500→
+   501→   501→        {/* Users */}
+   502→   502→        {activeTab === 'users' && (
+   503→   503→          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+   504→   504→            <div className="p-4 border-b border-gray-200">
+   505→   505→              <h3 className="font-bold text-gray-900">用户管理（共 {users.length} 位）</h3>
+   506→   506→            </div>
+   507→   507→            <div className="overflow-x-auto">
+   508→   508→              <table className="w-full text-sm">
+   509→   509→                <thead className="bg-gray-50">
+   510→   510→                  <tr>
+   511→   511→                    <th className="text-left p-3 font-medium text-gray-600">用户</th>
+   512→   512→                    <th className="text-left p-3 font-medium text-gray-600">邮箱</th>
+   513→   513→                    <th className="text-left p-3 font-medium text-gray-600">套餐</th>
+   514→   514→                    <th className="text-left p-3 font-medium text-gray-600">角色</th>
+   515→   515→                    <th className="text-right p-3 font-medium text-gray-600">对话数</th>
+   516→   516→                    <th className="text-right p-3 font-medium text-gray-600">消息数</th>
+   517→   517→                    <th className="text-left p-3 font-medium text-gray-600">注册时间</th>
+   518→   518→                  </tr>
+   519→   519→                </thead>
+   520→   520→                <tbody>
+   521→   521→                  {users.map(u => (
+   522→   522→                    <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
+   523→   523→                      <td className="p-3">
+   524→   524→                        <div className="font-medium text-gray-900">{u.name}</div>
+   525→   525→                      </td>
+   526→   526→                      <td className="p-3 text-gray-600">{u.email}</td>
+   527→   527→                      <td className="p-3">
+   528→   528→                        <Badge variant={u.plan === 'premium' ? 'default' : u.plan === 'pro' ? 'secondary' : 'outline'}>
+   529→   529→                          {u.plan === 'free' ? '免费' : u.plan === 'pro' ? '专业¥49' : u.plan === 'premium' ? '旗舰¥99' : u.plan}
+   530→   530→                        </Badge>
+   531→   531→                      </td>
+   532→   532→                      <td className="p-3">
+   533→   533→                        {u.role === 'admin' ? (
+   534→   534→                          <Badge className="bg-red-100 text-red-700">管理员</Badge>
+   535→   535→                        ) : (
+   536→   536→                          <span className="text-gray-400">用户</span>
+   537→   537→                        )}
+   538→   538→                      </td>
+   539→   539→                      <td className="p-3 text-right text-gray-600">{u.conversationCount}</td>
+   540→   540→                      <td className="p-3 text-right text-gray-600">{u.messageCount}</td>
+   541→   541→                      <td className="p-3 text-gray-500 text-xs">{new Date(u.createdAt).toLocaleDateString('zh-CN')}</td>
+   542→   542→                    </tr>
+   543→   543→                  ))}
+   544→   544→                </tbody>
+   545→   545→              </table>
+   546→   546→            </div>
+   547→   547→          </div>
+   548→   548→        )}
+   549→   549→
+   550→   550→        {/* Subscriptions */}
+   551→   551→        {activeTab === 'subscriptions' && (
+   552→   552→          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+   553→   553→            <div className="p-4 border-b border-gray-200">
+   554→   554→              <h3 className="font-bold text-gray-900">订阅支付记录（共 {subscriptions.length} 条）</h3>
+   555→   555→            </div>
+   556→   556→            <div className="overflow-x-auto">
+   557→   557→              <table className="w-full text-sm">
+   558→   558→                <thead className="bg-gray-50">
+   559→   559→                  <tr>
+   560→   560→                    <th className="text-left p-3 font-medium text-gray-600">用户</th>
+   561→   561→                    <th className="text-left p-3 font-medium text-gray-600">套餐</th>
+   562→   562→                    <th className="text-right p-3 font-medium text-gray-600">金额</th>
+   563→   563→                    <th className="text-left p-3 font-medium text-gray-600">周期</th>
+   564→   564→                    <th className="text-left p-3 font-medium text-gray-600">状态</th>
+   565→   565→                    <th className="text-left p-3 font-medium text-gray-600">支付方式</th>
+   566→   566→                    <th className="text-left p-3 font-medium text-gray-600">订单号</th>
+   567→   567→                    <th className="text-left p-3 font-medium text-gray-600">时间</th>
+   568→   568→                  </tr>
+   569→   569→                </thead>
+   570→   570→                <tbody>
+   571→   571→                  {subscriptions.map(s => (
+   572→   572→                    <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50">
+   573→   573→                      <td className="p-3 text-gray-900">{s.user?.name || '未知'}</td>
+   574→   574→                      <td className="p-3">
+   575→   575→                        <Badge variant="outline">{s.plan === 'pro' ? '专业¥49' : '旗舰¥99'}</Badge>
+   576→   576→                      </td>
+   577→   577→                      <td className="p-3 text-right font-medium">¥{(s.amount / 100).toFixed(2)}</td>
+   578→   578→                      <td className="p-3 text-gray-600">{s.interval === 'year' ? '年付' : '月付'}</td>
+   579→   579→                      <td className="p-3">
+   580→   580→                        <Badge className={s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+   581→   581→                          {s.status === 'active' ? '已激活' : s.status === 'pending' ? '待支付' : s.status}
+   582→   582→                        </Badge>
+   583→   583→                      </td>
+   584→   584→                      <td className="p-3 text-gray-600">{s.paymentMethod === 'wechat' ? '微信' : s.paymentMethod === 'alipay' ? '支付宝' : s.paymentMethod}</td>
+   585→   585→                      <td className="p-3 text-xs text-gray-500 font-mono">{s.transactionId?.slice(0, 20)}...</td>
+   586→   586→                      <td className="p-3 text-gray-500 text-xs">{new Date(s.createdAt).toLocaleString('zh-CN')}</td>
+   587→   587→                    </tr>
+   588→   588→                  ))}
+   589→   589→                </tbody>
+   590→   590→              </table>
+   591→   591→            </div>
+   592→   592→          </div>
+   593→   593→        )}
+   594→   594→
+   595→   595→        {/* Crisis Logs */}
+   596→   596→        {activeTab === 'crisis' && (
+   597→   597→          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+   598→   598→            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+   599→   599→              <h3 className="font-bold text-gray-900">危机干预日志（共 {crisisLogs.length} 条）</h3>
+   600→   600→              <div className="flex items-center gap-2 text-sm text-gray-500">
+   601→   601→                <Phone className="size-4" />
+   602→   602→                <span>热线：400-161-9995</span>
+   603→   603→              </div>
+   604→   604→            </div>
+   605→   605→            <div className="divide-y divide-gray-100">
+   606→   606→              {crisisLogs.map(log => (
+   607→   607→                <div key={log.id} className="p-4 hover:bg-gray-50">
+   608→   608→                  <div className="flex items-start justify-between mb-2">
+   609→   609→                    <div className="flex items-center gap-2">
+   610→   610→                      <Badge className={
+   611→   611→                        log.riskLevel === 'severe' ? 'bg-red-100 text-red-700' :
+   612→   612→                        log.riskLevel === 'mild' ? 'bg-yellow-100 text-yellow-700' :
+   613→   613→                        'bg-gray-100 text-gray-700'
+   614→   614→                      }>
+   615→   615→                        {log.riskLevel === 'severe' ? '严重' : log.riskLevel === 'mild' ? '轻微' : '安全'}
+   616→   616→                      </Badge>
+   617→   617→                      {log.hotlineShown && <Badge variant="outline" className="text-xs">已展示热线</Badge>}
+   618→   618→                      <span className="text-xs text-gray-500">{new Date(log.createdAt).toLocaleString('zh-CN')}</span>
+   619→   619→                    </div>
+   620→   620→                    <Badge className={log.resolved ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}>
+   621→   621→                      {log.resolved ? '已处理' : '待处理'}
+   622→   622→                    </Badge>
+   623→   623→                  </div>
+   624→   624→                  <div className="text-sm text-gray-700 mb-2">
+   625→   625→                    <span className="font-medium">用户输入：</span>
+   626→   626→                    <span className="text-gray-600">"{log.userInput}"</span>
+   627→   627→                  </div>
+   628→   628→                  {log.triggerKeywords && (
+   629→   629→                    <div className="text-xs text-gray-500 mb-2">
+   630→   630→                      触发词：{log.triggerKeywords}
+   631→   631→                    </div>
+   632→   632→                  )}
+   633→   633→                  <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
+   634→   634→                    {log.interventionResponse?.slice(0, 150)}...
+   635→   635→                  </div>
+   636→   636→                </div>
+   637→   637→              ))}
+   638→   638→              {crisisLogs.length === 0 && (
+   639→   639→                <div className="p-8 text-center text-gray-400">暂无危机干预记录</div>
+   640→   640→              )}
+   641→   641→            </div>
+   642→   642→          </div>
+   643→   643→        )}
+   644→   644→      </main>
+   645→   645→    </div>
+   646→   646→  )
+   647→   647→}
+   648→   648→
+   649→   649→function StatCard({ icon: Icon, label, value, sub, color }: { icon: any; label: string; value: number; sub: string; color: string }) {
+   650→   650→  const colors: Record<string, string> = {
+   651→   651→    blue: 'bg-blue-50 text-blue-600',
+   652→   652→    green: 'bg-green-50 text-green-600',
+   653→   653→    purple: 'bg-purple-50 text-purple-600',
+   654→   654→    amber: 'bg-amber-50 text-amber-600',
+   655→   655→  }
+   656→   656→  return (
+   657→   657→    <div className="bg-white rounded-xl border border-gray-200 p-4">
+   658→   658→      <div className="flex items-center justify-between mb-2">
+   659→   659→        <div className={`w-10 h-10 rounded-lg flex items-center justify-center ${colors[color]}`}>
+   660→   660→          <Icon className="size-5" />
+   661→   661→        </div>
+   662→   662→      </div>
+   663→   663→      <p className="text-2xl font-bold text-gray-900">{value}</p>
+   664→   664→      <p className="text-sm text-gray-500 mt-1">{label}</p>
+   665→   665→      <p className="text-xs text-gray-400 mt-1">{sub}</p>
+   666→   666→    </div>
+   667→   667→  )
+   668→   668→}
+   669→   669→
