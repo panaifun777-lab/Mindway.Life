@@ -30,6 +30,7 @@ interface Philosopher {
   quoteSource: string
   bioSummary: string
   coreInsight: string
+  description: string
   worries: string
   works: string
   recommendedBooks: string
@@ -432,6 +433,37 @@ export default function PhilosopherDetail() {
                   {philosopher.coreInsight}
                 </p>
               </motion.div>
+
+              {/* Detailed Description (全息档案) */}
+              {philosopher.description && (
+                <motion.div
+                  custom={6}
+                  variants={sectionVariants}
+                  initial="hidden"
+                  animate="visible"
+                  className="rounded-xl p-5 border"
+                  style={{
+                    borderColor: 'var(--app-border)',
+                    background: 'var(--app-bg)',
+                  }}
+                >
+                  <div className="flex items-center gap-2 mb-3">
+                    <Sparkles className="size-4" style={{ color: 'var(--app-accent)' }} />
+                    <h3
+                      className="font-serif font-bold"
+                      style={{ fontFamily: 'Georgia, "Noto Serif SC", serif', color: 'var(--app-text-primary)' }}
+                    >
+                      详细档案
+                    </h3>
+                  </div>
+                  <div
+                    className="text-sm leading-relaxed whitespace-pre-line max-h-96 overflow-y-auto pr-2"
+                    style={{ color: 'var(--app-text-secondary)' }}
+                  >
+                    {philosopher.description}
+                  </div>
+                </motion.div>
+              )}
 
               {/* Worries */}
               <motion.div

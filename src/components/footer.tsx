@@ -1,6 +1,6 @@
 'use client'
 
-import { Crown } from 'lucide-react'
+import { Crown, Settings } from 'lucide-react'
 import ThemeToggle from '@/components/theme-toggle'
 import { useAppStore } from '@/lib/store'
 
@@ -28,9 +28,17 @@ export default function Footer() {
             <Crown className="size-3.5" />
             订阅方案
           </button>
+          <button
+            onClick={() => setView('admin')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs text-[var(--app-text-muted)] hover:bg-[var(--app-bg-card)] transition-colors min-h-[36px]"
+            title="管理后台"
+          >
+            <Settings className="size-3.5" />
+            管理
+          </button>
         </div>
         <p className="text-xs text-[var(--app-text-muted)] mt-4 opacity-60">
-          © 2026 飘叔工作室
+          © 2026 飘叔工作室 · 联系方式：piaoshu@mindway.life
         </p>
       </div>
     </footer>

@@ -18,6 +18,7 @@ import AuthView from '@/components/auth-view'
 import UserMenu from '@/components/user-menu'
 import Footer from '@/components/footer'
 import ThemeToggle from '@/components/theme-toggle'
+import AdminPanel from '@/components/admin-panel'
 
 function AppContent() {
   const { currentView, goHome, login } = useAppStore()
@@ -42,7 +43,12 @@ function AppContent() {
   // Views that use the shared header
   const headerViews = ['home', 'detail']
   // Full-screen views that manage their own header
-  const fullScreenViews = ['chat', 'debate', 'quiz', 'login', 'register', 'subscription']
+  const fullScreenViews = ['chat', 'debate', 'quiz', 'login', 'register', 'subscription', 'admin']
+
+  // Admin panel - full screen, no app header
+  if (currentView === 'admin') {
+    return <AdminPanel />
+  }
 
   return (
     <div className="min-h-screen flex flex-col bg-[var(--app-bg)]">
