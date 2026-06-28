@@ -25,6 +25,7 @@ async function main() {
         recommendedBooks: p.recommendedBooks || '',
         quote: p.quote,
         quoteSource: p.quoteSource || '',
+        description: (p as any).description || '',
         systemPrompt: p.systemPrompt,
         order: p.order,
         isHost: (p as any).isHost || false,
