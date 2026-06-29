@@ -2,7 +2,7 @@
 
 import { useState, useRef, useEffect, useCallback } from 'react'
 import { motion, AnimatePresence } from 'framer-motion'
-import { ArrowLeft, Send, Plus, Terminal, ShieldCheck, Copy, Check } from 'lucide-react'
+import { ArrowLeft, Send, Plus, Terminal, ShieldCheck, Copy, Check, Download, Star, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
 import { Textarea } from '@/components/ui/textarea'
@@ -50,6 +50,13 @@ export default function ChatInterface() {
     show: false,
     hotline: '',
   })
+  // 对话评分组件状态：assistant 一次回复结束后弹出 5 星评分卡
+  const [showRating, setShowRating] = useState(false)
+  const [userRating, setUserRating] = useState(0)
+  const [hoverRating, setHoverRating] = useState(0)
+  const [ratingSubmitting, setRatingSubmitting] = useState(false)
+  const [ratingSubmitted, setRatingSubmitted] = useState(false)
+  const [exporting, setExporting] = useState(false)
   const scrollRef = useRef<HTMLDivElement>(null)
   const abortRef = useRef<AbortController | null>(null)
 
@@ -126,7 +133,77 @@ export default function ChatInterface() {
     setStreamingContent('')
     setIsStreaming(false)
     setInput('')
+    // 重置评分组件状态
+    setShowRating(false)
+    setUserRating(0)
+    setHoverRating(0)
+    setRatingSubmitted(false)
+    setRatingSubmitting(false)
   }, [])
+
+  // 导出当前对话为 txt 文件
+  // 后端 /api/conversations/[id]/export 直接返回 text/plain + attachment
+  // 用 window.open 在新标签触发下载，避免影响当前会话状态
+  const handleExport = useCallback(async () => {
+    if (!conversationId || exporting) return
+    setExporting(true)
+    try {
+      // 用 fetch + blob 触发下载，便于失败时给出提示；同时保留 cookie 认证
+      const res = await fetch(`/api/conversations/${conversationId}/export`)
+      if (!res.ok) {
+        throw new Error('导出失败')
+      }
+      const blob = await res.blob()
+      // 从 Content-Disposition 中取文件名（如果有）
+      const cd = res.headers.get('Content-Disposition') || ''
+      let filename = 'conversation.txt'
+      const starMatch = cd.match(/filename\*=UTF-8''([^;]+)/i)
+      const plainMatch = cd.match(/filename="?([^";]+)"?/i)
+      if (starMatch) {
+        try { filename = decodeURIComponent(starMatch[1]) } catch { /* noop */ }
+      } else if (plainMatch) {
+        filename = plainMatch[1]
+      }
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = filename
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch {
+      // 兜底：直接 window.open 触发浏览器原生下载
+      window.open(`/api/conversations/${conversationId}/export`, '_blank')
+    } finally {
+      setExporting(false)
+    }
+  }, [conversationId, exporting])
+
+  // 提交评分
+  const handleRating = useCallback(
+    async (rating: number) => {
+      if (ratingSubmitting || ratingSubmitted) return
+      if (!conversationId) return
+      setUserRating(rating)
+      setRatingSubmitting(true)
+      try {
+        const res = await fetch('/api/ratings', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ conversationId, rating }),
+        })
+        if (res.ok) {
+          setRatingSubmitted(true)
+        }
+      } catch {
+        // 忽略网络错误，不阻塞用户体验
+      } finally {
+        setRatingSubmitting(false)
+      }
+    },
+    [conversationId, ratingSubmitting, ratingSubmitted]
+  )
 
   const handleSend = useCallback(async () => {
     if (!input.trim() || isStreaming || !philosopher) return
@@ -140,6 +217,9 @@ export default function ChatInterface() {
     // Create abort controller for this request
     const controller = new AbortController()
     abortRef.current = controller
+
+    // 声明在 try 外，便于 finally 块读取以触发评分卡显示
+    let accumulated = ''
 
     try {
       const history = messages.map(m => ({ role: m.role, content: m.content }))
@@ -164,7 +244,6 @@ export default function ChatInterface() {
       if (!reader) throw new Error('No reader available')
 
       const decoder = new TextDecoder()
-      let accumulated = ''
 
       while (true) {
         const { done, value } = await reader.read()
@@ -231,6 +310,10 @@ export default function ChatInterface() {
       setIsStreaming(false)
       setStreamingContent('')
       abortRef.current = null
+      // assistant 完成一次回复后，弹出评分卡（仅本次新会话，重置时清空）
+      if (accumulated) {
+        setShowRating(true)
+      }
     }
   }, [input, isStreaming, philosopher, messages, conversationId, streamingContent])
 
@@ -290,6 +373,22 @@ export default function ChatInterface() {
           >
             <Plus className="size-5" />
           </Button>
+          {conversationId && (
+            <Button
+              variant="ghost"
+              size="icon"
+              onClick={handleExport}
+              disabled={exporting}
+              className="text-[var(--app-text-secondary)] hover:bg-[var(--app-bg-card)] shrink-0 min-h-[44px] min-w-[44px]"
+              title="导出对话"
+            >
+              {exporting ? (
+                <Loader2 className="size-5 animate-spin" />
+              ) : (
+                <Download className="size-5" />
+              )}
+            </Button>
+          )}
           <ThemeToggle />
         </div>
       </header>
@@ -443,6 +542,72 @@ export default function ChatInterface() {
                 </div>
               </motion.div>
             ))}
+          </AnimatePresence>
+
+          {/* 评分卡：assistant 一次回复结束后出现，用户提交后变为感谢提示 */}
+          <AnimatePresence>
+            {showRating && !isStreaming && (
+              <motion.div
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                exit={{ opacity: 0, y: 8 }}
+                className="flex justify-center"
+              >
+                <div
+                  className="mt-2 rounded-xl border px-4 py-3 flex flex-col items-center gap-2 max-w-md w-full"
+                  style={{
+                    backgroundColor: 'var(--app-bg-card)',
+                    borderColor: 'var(--app-border)',
+                  }}
+                >
+                  {ratingSubmitted ? (
+                    <div className="flex items-center gap-2 text-sm" style={{ color: 'var(--app-text-secondary)' }}>
+                      <Check className="size-4 text-emerald-500" />
+                      感谢你的评分，这将帮助我们变得更好
+                    </div>
+                  ) : (
+                    <>
+                      <span className="text-xs" style={{ color: 'var(--app-text-muted)' }}>
+                        这次对话对你有帮助吗？
+                      </span>
+                      <div className="flex items-center gap-1.5">
+                        {[1, 2, 3, 4, 5].map((star) => {
+                          const active = (hoverRating || userRating) >= star
+                          return (
+                            <button
+                              key={star}
+                              type="button"
+                              disabled={ratingSubmitting}
+                              onMouseEnter={() => setHoverRating(star)}
+                              onMouseLeave={() => setHoverRating(0)}
+                              onClick={() => handleRating(star)}
+                              className="p-1 disabled:opacity-50 disabled:cursor-not-allowed transition-transform hover:scale-110"
+                              title={`${star} 星`}
+                            >
+                              <Star
+                                className={`size-6 ${active ? 'fill-amber-400 text-amber-400' : ''}`}
+                                style={{ color: active ? '#fbbf24' : 'var(--app-text-muted)' }}
+                              />
+                            </button>
+                          )
+                        })}
+                        {ratingSubmitting && (
+                          <Loader2 className="size-4 ml-2 animate-spin" style={{ color: 'var(--app-text-muted)' }} />
+                        )}
+                      </div>
+                      <button
+                        type="button"
+                        onClick={() => setShowRating(false)}
+                        className="text-[10px] mt-0.5 hover:underline"
+                        style={{ color: 'var(--app-text-muted)' }}
+                      >
+                        稍后再说
+                      </button>
+                    </>
+                  )}
+                </div>
+              </motion.div>
+            )}
           </AnimatePresence>
 
           {/* Streaming message bubble */}

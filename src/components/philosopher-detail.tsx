@@ -1,7 +1,7 @@
 'use client'
 
 import { motion } from 'framer-motion'
-import { X, MessageCircle, Swords, BookOpen, Quote, Share2, Clock, CheckCircle2 } from 'lucide-react'
+import { X, MessageCircle, Swords, BookOpen, Quote, Share2, Clock, CheckCircle2, Heart, Loader2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar'
@@ -10,7 +10,7 @@ import { Separator } from '@/components/ui/separator'
 import { useAppStore } from '@/lib/store'
 import { useQuery } from '@tanstack/react-query'
 import { useToast } from '@/hooks/use-toast'
-import { useState } from 'react'
+import { useState, useEffect } from 'react'
 
 interface BookRecommendation {
   title: string
@@ -101,6 +101,9 @@ export default function PhilosopherDetail() {
   const { selectedPhilosopherId, setView, goHome } = useAppStore()
   const { toast } = useToast()
   const [copied, setCopied] = useState(false)
+  // 收藏状态：页面加载时拉取当前用户收藏列表推导是否收藏，采用乐观更新
+  const [isFavorited, setIsFavorited] = useState(false)
+  const [favLoading, setFavLoading] = useState(false)
 
   // First get slug from the lightweight list
   const { data: philosophers = [] } = useQuery<{id: string; slug: string}[]>({
@@ -116,6 +119,80 @@ export default function PhilosopherDetail() {
     queryFn: () => fetch(`/api/philosophers/${selectedSlug}`).then(res => res.json()),
     enabled: !!selectedSlug,
   })
+
+  // 加载收藏状态：拉取当前用户收藏列表，判断是否包含当前哲学家
+  // 未登录用户静默失败（401），默认为未收藏
+  useEffect(() => {
+    if (!philosopher?.id) return
+    let cancelled = false
+    fetch('/api/favorites', { credentials: 'include' })
+      .then(async (res) => {
+        if (!res.ok) return null
+        return res.json()
+      })
+      .then((data) => {
+        if (cancelled || !data?.favorites) return
+        setIsFavorited(
+          data.favorites.some(
+            (f: { philosopherId: string }) => f.philosopherId === philosopher.id
+          )
+        )
+      })
+      .catch(() => {
+        // 静默处理：未登录或网络错误都不打断详情页浏览
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [philosopher?.id])
+
+  // 切换收藏状态：乐观更新 + 失败回滚
+  const handleToggleFavorite = async () => {
+    if (!philosopher?.id || favLoading) return
+    const wasFavorited = isFavorited
+    setIsFavorited(!wasFavorited) // 乐观更新
+    setFavLoading(true)
+    try {
+      const res = await fetch('/api/favorites', {
+        method: wasFavorited ? 'DELETE' : 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        credentials: 'include',
+        body: JSON.stringify({ philosopherId: philosopher.id }),
+      })
+      if (!res.ok) {
+        setIsFavorited(wasFavorited) // 回滚
+        if (res.status === 401) {
+          toast({
+            title: '请先登录',
+            description: '收藏功能需要登录后使用',
+            variant: 'destructive',
+          })
+        } else {
+          toast({
+            title: '操作失败',
+            description: '请稍后重试',
+            variant: 'destructive',
+          })
+        }
+        return
+      }
+      toast({
+        title: wasFavorited ? '已取消收藏' : '收藏成功',
+        description: wasFavorited
+          ? `${philosopher.nameCn}已从收藏移除`
+          : `${philosopher.nameCn}已加入收藏`,
+      })
+    } catch {
+      setIsFavorited(wasFavorited)
+      toast({
+        title: '网络错误',
+        description: '请检查网络后重试',
+        variant: 'destructive',
+      })
+    } finally {
+      setFavLoading(false)
+    }
+  }
 
   if (!philosopher) return null
 
@@ -624,6 +701,26 @@ export default function PhilosopherDetail() {
               >
                 <Swords className="mr-2 size-4" />
                 开启辩论
+              </Button>
+              <Button
+                onClick={handleToggleFavorite}
+                disabled={favLoading}
+                variant="outline"
+                className="flex-1 sm:flex-none sm:w-12 rounded-xl min-h-[48px] transition-all duration-300"
+                style={{
+                  borderColor: isFavorited ? '#f43f5e' : 'var(--app-border)',
+                  color: isFavorited ? '#f43f5e' : 'var(--app-text-secondary)',
+                }}
+                title={isFavorited ? '取消收藏' : '收藏'}
+              >
+                {favLoading ? (
+                  <Loader2 className="size-4 animate-spin" />
+                ) : (
+                  <Heart
+                    className={`size-4 ${isFavorited ? 'fill-rose-500' : ''}`}
+                  />
+                )}
+                <span className="sm:hidden ml-2">{isFavorited ? '已收藏' : '收藏'}</span>
               </Button>
             </div>
           </div>
