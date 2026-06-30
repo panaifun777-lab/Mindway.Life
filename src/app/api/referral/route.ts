@@ -90,7 +90,7 @@ export async function GET(request: NextRequest) {
 
     return NextResponse.json({
       referralCode,
-      referralLink: `${request.nextUrl.origin}/?ref=${referralCode}`,
+      referralLink: `https://mindway.life/?ref=${referralCode}`,
       totalReferrals,
       activeReferrals,
       totalCommission: commissionAgg._sum.commission || 0, // 单位：分
@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({
       success: true,
       referralCode: newCode,
-      referralLink: `${request.nextUrl.origin}/?ref=${newCode}`,
+      referralLink: `https://mindway.life/?ref=${newCode}`,
       message: '邀请码已生成',
     });
   } catch (error) {

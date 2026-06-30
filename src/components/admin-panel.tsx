@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from 'react'
 import { motion } from 'framer-motion'
-import { LayoutDashboard, Users, MessageSquare, CreditCard, AlertTriangle, LogOut, Loader2, TrendingUp, DollarSign, Activity, Phone, Settings, BarChart3, Save, CheckCircle2, KeyRound, Megaphone, Mail, Plus, RefreshCw, Trash2, Ticket, Power, PowerOff, BookOpen, Pencil } from 'lucide-react'
+import { LayoutDashboard, Users, MessageSquare, CreditCard, AlertTriangle, LogOut, Loader2, TrendingUp, DollarSign, Activity, Phone, Settings, BarChart3, Save, CheckCircle2, KeyRound, Megaphone, Mail, Plus, RefreshCw, Trash2, Ticket, Power, PowerOff, BookOpen, Pencil, Coins, Gift, Sparkles, Users2 } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
@@ -108,7 +108,7 @@ export default function AdminPanel() {
   const [loginForm, setLoginForm] = useState({ email: '', password: '' })
   const [loginError, setLoginError] = useState('')
   const [stats, setStats] = useState<Stats | null>(null)
-  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'subscriptions' | 'marketing' | 'crisis' | 'settings' | 'analytics' | 'philosophers'>('dashboard')
+  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'subscriptions' | 'marketing' | 'crisis' | 'settings' | 'analytics' | 'philosophers' | 'monetization'>('dashboard')
   const [users, setUsers] = useState<any[]>([])
   const [subscriptions, setSubscriptions] = useState<any[]>([])
   const [crisisLogs, setCrisisLogs] = useState<any[]>([])
@@ -185,6 +185,66 @@ export default function AdminPanel() {
   const [philosopherSaving, setPhilosopherSaving] = useState(false)
   const [philosopherError, setPhilosopherError] = useState('')
   const [deletingPhilosopher, setDeletingPhilosopher] = useState<PhilosopherListItem | null>(null)
+
+  // ===== 盈利管理状态 =====
+  interface MonetizationTopArticle {
+    id: string
+    title: string
+    price: number
+    viewCount: number
+    likeCount: number
+    category: string
+    purchaseCount: number
+    revenueFen: number
+  }
+  interface MonetizationTier {
+    tier: string
+    label: string
+    count: number
+    revenueFen: number
+  }
+  interface MonetizationData {
+    generatedAt: string
+    summary: {
+      totalRevenueFen: number
+      totalCommissionFen: number
+      netRevenueFen: number
+    }
+    token: {
+      revenueFen: number
+      totalPurchased: number
+      totalConsumed: number
+      purchaseCount: number
+      purchaserCount: number
+      activeAccounts: number
+      totalAccounts: number
+    }
+    articles: {
+      revenueFen: number
+      totalArticles: number
+      publishedArticles: number
+      paidArticles: number
+      totalPurchases: number
+      topArticles: MonetizationTopArticle[]
+    }
+    digitalLife: {
+      revenueFen: number
+      total: number
+      totalConversations: number
+      tierDistribution: MonetizationTier[]
+    }
+    referral: {
+      totalReferrals: number
+      convertedReferrals: number
+      registeredReferrals: number
+      activeReferrerCount: number
+      totalCommissionFen: number
+      conversionRate: number
+    }
+  }
+  const [monetization, setMonetization] = useState<MonetizationData | null>(null)
+  const [monetizationLoading, setMonetizationLoading] = useState(false)
+  const [monetizationError, setMonetizationError] = useState('')
 
   // 检查登录状态
   useEffect(() => {
@@ -316,6 +376,28 @@ export default function AdminPanel() {
       if (res.ok) setAnalytics(await res.json())
     } catch {} finally {
       setAnalyticsLoading(false)
+    }
+  }
+
+  const loadMonetization = async () => {
+    setMonetizationLoading(true)
+    setMonetizationError('')
+    try {
+      const res = await fetch('/api/admin/monetization')
+      if (res.status === 401) {
+        setMonetizationError('未授权，请重新登录')
+        return
+      }
+      if (res.ok) {
+        setMonetization(await res.json())
+      } else {
+        const data = await res.json().catch(() => ({}))
+        setMonetizationError(data.error || '加载盈利数据失败')
+      }
+    } catch {
+      setMonetizationError('网络错误')
+    } finally {
+      setMonetizationLoading(false)
     }
   }
 
@@ -554,10 +636,18 @@ export default function AdminPanel() {
       else if (activeTab === 'crisis') loadCrisisLogs()
       else if (activeTab === 'settings') loadSiteConfig()
       else if (activeTab === 'analytics') loadAnalytics()
+      else if (activeTab === 'monetization') {
+        loadMonetization()
+        if (!stats) loadStats()
+      }
       else if (activeTab === 'philosophers') {
         // 由专门的筛选 useEffect 处理（含首次加载）
       }
-      else loadStats()
+      else {
+        loadStats()
+        // Dashboard 同时加载盈利摘要
+        if (activeTab === 'dashboard' && !monetization) loadMonetization()
+      }
     }
   }, [activeTab, authenticated])
 
@@ -666,6 +756,7 @@ export default function AdminPanel() {
             { id: 'users', label: '用户管理', icon: Users },
             { id: 'philosophers', label: '哲学家管理', icon: BookOpen },
             { id: 'subscriptions', label: '订阅支付', icon: CreditCard },
+            { id: 'monetization', label: '盈利管理', icon: DollarSign },
             { id: 'marketing', label: '销售营销', icon: Megaphone },
             { id: 'crisis', label: '危机干预', icon: AlertTriangle },
             { id: 'settings', label: '系统设置', icon: Settings },
@@ -700,6 +791,70 @@ export default function AdminPanel() {
               <StatCard icon={MessageSquare} label="对话总数" value={stats.conversations.total} sub={`今日 +${stats.conversations.today}`} color="green" />
               <StatCard icon={Activity} label="消息总数" value={stats.messages.total} sub={`今日 +${stats.messages.today}`} color="purple" />
               <StatCard icon={DollarSign} label="活跃订阅" value={stats.subscriptions.active} sub={`收入 ¥${(stats.subscriptions.revenue / 100).toFixed(2)}`} color="amber" />
+            </div>
+
+            {/* 盈利模块摘要 */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <div className="flex items-center justify-between mb-4">
+                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+                  <DollarSign className="size-5 text-amber-600" />
+                  盈利模块摘要
+                </h3>
+                <Button
+                  variant="outline"
+                  size="sm"
+                  onClick={() => setActiveTab('monetization')}
+                >
+                  查看详情 →
+                </Button>
+              </div>
+              {monetization ? (
+                <>
+                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
+                    <div className="p-3 bg-blue-50/50 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Coins className="size-3.5" /> Token 收入
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">¥{(monetization.token.revenueFen / 100).toFixed(2)}</p>
+                      <p className="text-xs text-gray-400">{monetization.token.purchaseCount} 笔购买</p>
+                    </div>
+                    <div className="p-3 bg-purple-50/50 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <BookOpen className="size-3.5" /> 专栏收入
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">¥{(monetization.articles.revenueFen / 100).toFixed(2)}</p>
+                      <p className="text-xs text-gray-400">{monetization.articles.totalPurchases} 次购买</p>
+                    </div>
+                    <div className="p-3 bg-amber-50/50 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Sparkles className="size-3.5" /> 数字生命体
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">¥{(monetization.digitalLife.revenueFen / 100).toFixed(2)}</p>
+                      <p className="text-xs text-gray-400">{monetization.digitalLife.total} 个</p>
+                    </div>
+                    <div className="p-3 bg-emerald-50/50 rounded-lg">
+                      <div className="flex items-center gap-1.5 text-xs text-gray-500 mb-1">
+                        <Gift className="size-3.5" /> 联盟佣金支出
+                      </div>
+                      <p className="text-lg font-bold text-gray-900">¥{(monetization.referral.totalCommissionFen / 100).toFixed(2)}</p>
+                      <p className="text-xs text-gray-400">转化率 {monetization.referral.conversionRate}%</p>
+                    </div>
+                  </div>
+                  <div className="pt-4 border-t border-gray-100 flex items-center justify-between">
+                    <span className="text-sm text-gray-600">净收入（盈利模块合计 - 联盟佣金）</span>
+                    <span className="text-xl font-bold text-amber-700">¥{(monetization.summary.netRevenueFen / 100).toFixed(2)}</span>
+                  </div>
+                </>
+              ) : monetizationLoading ? (
+                <div className="flex items-center justify-center py-6">
+                  <Loader2 className="size-5 animate-spin text-gray-400 mr-2" />
+                  <span className="text-sm text-gray-500">加载盈利数据...</span>
+                </div>
+              ) : (
+                <div className="text-sm text-gray-400 py-4 text-center">
+                  盈利数据暂未加载
+                </div>
+              )}
             </div>
 
             {/* 用户分布 */}
@@ -1167,6 +1322,158 @@ export default function AdminPanel() {
                     )}
                   </tbody>
                 </table>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Monetization (盈利管理) */}
+        {activeTab === 'monetization' && monetization && (
+          <div className="space-y-6">
+            {/* 收入总览 */}
+            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-amber-50 text-amber-600 mb-2">
+                  <DollarSign className="size-5" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">¥{(monetization.token.revenueEstimate / 100).toFixed(2)}</p>
+                <p className="text-sm text-gray-500">Token收入</p>
+                <p className="text-xs text-gray-400 mt-1">{monetization.token.purchaseCount} 笔购买</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-blue-50 text-blue-600 mb-2">
+                  <BookOpen className="size-5" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">¥{(monetization.articles.revenue / 100).toFixed(2)}</p>
+                <p className="text-sm text-gray-500">专栏收入</p>
+                <p className="text-xs text-gray-400 mt-1">{monetization.articles.totalPurchases} 次购买</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-purple-50 text-purple-600 mb-2">
+                  <Sparkles className="size-5" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">¥{(monetization.digitalLife.revenue / 100).toFixed(2)}</p>
+                <p className="text-sm text-gray-500">数字生命体收入</p>
+                <p className="text-xs text-gray-400 mt-1">{monetization.digitalLife.total} 个创建</p>
+              </div>
+              <div className="bg-white rounded-xl border border-gray-200 p-4">
+                <div className="w-10 h-10 rounded-lg flex items-center justify-center bg-red-50 text-red-600 mb-2">
+                  <TrendingUp className="size-5" />
+                </div>
+                <p className="text-2xl font-bold text-gray-900">¥{(monetization.referral.commission / 100).toFixed(2)}</p>
+                <p className="text-sm text-gray-500">联盟佣金支出</p>
+                <p className="text-xs text-gray-400 mt-1">{monetization.referral.total} 次邀请</p>
+              </div>
+            </div>
+
+            {/* 总收入 */}
+            <div className="bg-gradient-to-r from-amber-50 to-orange-50 rounded-xl border border-amber-200 p-6 text-center">
+              <p className="text-sm text-gray-500 mb-1">平台总收入</p>
+              <p className="text-4xl font-bold text-amber-700">¥{(monetization.totalRevenue / 100).toFixed(2)}</p>
+              <p className="text-xs text-gray-400 mt-2">Token + 专栏 + 数字生命体</p>
+            </div>
+
+            {/* Token统计 */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-900 mb-4">📊 Token统计</h3>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+                <div>
+                  <p className="text-xs text-gray-500">活跃Token账户</p>
+                  <p className="text-xl font-bold text-gray-900">{monetization.token.activeAccounts}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">累计Token消耗</p>
+                  <p className="text-xl font-bold text-gray-900">{monetization.token.totalConsumed}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">累计Token购买</p>
+                  <p className="text-xl font-bold text-gray-900">{monetization.token.totalPurchased}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">购买次数</p>
+                  <p className="text-xl font-bold text-gray-900">{monetization.token.purchaseCount}</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 专栏统计 */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-900 mb-4">📖 专栏统计</h3>
+              <div className="grid grid-cols-3 gap-4 mb-4">
+                <div>
+                  <p className="text-xs text-gray-500">总文章数</p>
+                  <p className="text-xl font-bold text-gray-900">{monetization.articles.total}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">总购买数</p>
+                  <p className="text-xl font-bold text-gray-900">{monetization.articles.totalPurchases}</p>
+                </div>
+                <div>
+                  <p className="text-xs text-gray-500">专栏收入</p>
+                  <p className="text-xl font-bold text-gray-900">¥{(monetization.articles.revenue / 100).toFixed(2)}</p>
+                </div>
+              </div>
+              {monetization.articles.topArticles.length > 0 && (
+                <div>
+                  <p className="text-sm font-medium text-gray-600 mb-2">热门文章 Top 5</p>
+                  <div className="space-y-2">
+                    {monetization.articles.topArticles.map((art: any, i: number) => (
+                      <div key={i} className="flex items-center justify-between p-2 bg-gray-50 rounded-lg">
+                        <span className="text-sm text-gray-700">{art.title}</span>
+                        <div className="flex items-center gap-3">
+                          <span className="text-xs text-gray-500">¥{(art.price / 100).toFixed(2)}</span>
+                          <Badge variant="secondary">{art.purchases} 次购买</Badge>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* 数字生命体统计 */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-900 mb-4">✨ 数字生命体统计</h3>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{monetization.digitalLife.total}</p>
+                  <p className="text-xs text-gray-500">总数</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{monetization.digitalLife.basic}</p>
+                  <p className="text-xs text-gray-500">基础版¥199</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{monetization.digitalLife.annual}</p>
+                  <p className="text-xs text-gray-500">年费版¥299</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{monetization.digitalLife.premium}</p>
+                  <p className="text-xs text-gray-500">旗舰版¥999</p>
+                </div>
+              </div>
+            </div>
+
+            {/* 联盟统计 */}
+            <div className="bg-white rounded-xl border border-gray-200 p-6">
+              <h3 className="font-bold text-gray-900 mb-4">🤝 联盟统计</h3>
+              <div className="grid grid-cols-4 gap-4">
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-gray-900">{monetization.referral.total}</p>
+                  <p className="text-xs text-gray-500">总邀请数</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-green-600">{monetization.referral.paid}</p>
+                  <p className="text-xs text-gray-500">已转化</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-amber-600">{monetization.referral.conversionRate}%</p>
+                  <p className="text-xs text-gray-500">转化率</p>
+                </div>
+                <div className="text-center">
+                  <p className="text-2xl font-bold text-red-600">¥{(monetization.referral.commission / 100).toFixed(2)}</p>
+                  <p className="text-xs text-gray-500">佣金支出</p>
+                </div>
               </div>
             </div>
           </div>

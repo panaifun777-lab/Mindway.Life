@@ -1,0 +1,2002 @@
+     1→     1→'use client'
+     2→     2→
+     3→     3→import { useState, useEffect } from 'react'
+     4→     4→import { motion } from 'framer-motion'
+     5→     5→import { LayoutDashboard, Users, MessageSquare, CreditCard, AlertTriangle, LogOut, Loader2, TrendingUp, DollarSign, Activity, Phone, Settings, BarChart3, Save, CheckCircle2, KeyRound, Megaphone, Mail, Plus, RefreshCw, Trash2, Ticket, Power, PowerOff, BookOpen, Pencil } from 'lucide-react'
+     6→     6→import { Button } from '@/components/ui/button'
+     7→     7→import { Input } from '@/components/ui/input'
+     8→     8→import { Badge } from '@/components/ui/badge'
+     9→     9→import { Textarea } from '@/components/ui/textarea'
+    10→    10→import { Switch } from '@/components/ui/switch'
+    11→    11→import { Label } from '@/components/ui/label'
+    12→    12→import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+    13→    13→import {
+    14→    14→  Dialog,
+    15→    15→  DialogContent,
+    16→    16→  DialogHeader,
+    17→    17→  DialogTitle,
+    18→    18→  DialogDescription,
+    19→    19→  DialogFooter,
+    20→    20→} from '@/components/ui/dialog'
+    21→    21→
+    22→    22→interface AdminUser {
+    23→    23→  id: string
+    24→    24→  email: string
+    25→    25→  name: string
+    26→    26→  role: string
+    27→    27→  plan: string
+    28→    28→}
+    29→    29→
+    30→    30→interface Stats {
+    31→    31→  users: { total: number; pro: number; premium: number; free: number; today: number; dailyNew: Record<string, number> }
+    32→    32→  conversations: { total: number; today: number }
+    33→    33→  messages: { total: number; user: number; assistant: number; today: number }
+    34→    34→  subscriptions: { active: number; pending: number; revenue: number }
+    35→    35→  crisis: { total: number; severe: number; unresolved: number }
+    36→    36→  philosophers: { total: number; hosts: number }
+    37→    37→  insights: number
+    38→    38→  recentConversations: Array<{ id: string; philosopherName: string; philosopherAvatar: string; messageCount: number; createdAt: string; mode: string }>
+    39→    39→}
+    40→    40→
+    41→    41→interface SiteConfig {
+    42→    42→  id: string
+    43→    43→  siteName: string
+    44→    44→  announcement: string
+    45→    45→  bannerText: string
+    46→    46→  bannerEnabled: boolean
+    47→    47→  contactEmail: string
+    48→    48→  llmProvider: 'zhipu' | 'deepseek' | 'zai'
+    49→    49→  zhipuApiKey: string
+    50→    50→  deepseekApiKey: string
+    51→    51→  zhipuApiKeySet: boolean
+    52→    52→  deepseekApiKeySet: boolean
+    53→    53→  updatedAt?: string
+    54→    54→}
+    55→    55→
+    56→    56→interface Coupon {
+    57→    57→  id: string
+    58→    58→  code: string
+    59→    59→  discountType: 'percentage' | 'fixed'
+    60→    60→  discountValue: number
+    61→    61→  planId: string
+    62→    62→  maxUses: number
+    63→    63→  usedCount: number
+    64→    64→  expiresAt: string | null
+    65→    65→  active: boolean
+    66→    66→  createdAt: string
+    67→    67→}
+    68→    68→
+    69→    69→interface Analytics {
+    70→    70→  generatedAt: string
+    71→    71→  dailyConversationTrend: Array<{ date: string; count: number }>
+    72→    72→  dailyMessageTrend: Array<{ date: string; count: number }>
+    73→    73→  topPhilosophers: Array<{
+    74→    74→    rank: number
+    75→    75→    philosopherId: string
+    76→    76→    name: string
+    77→    77→    nameEn: string
+    78→    78→    avatarUrl: string
+    79→    79→    era: string
+    80→    80→    category: string
+    81→    81→    conversationCount: number
+    82→    82→  }>
+    83→    83→  retention: {
+    84→    84→    d1: { rate: number; retained: number; eligible: number }
+    85→    85→    d7: { rate: number; retained: number; eligible: number }
+    86→    86→    d30: { rate: number; retained: number; eligible: number }
+    87→    87→  }
+    88→    88→  funnel: {
+    89→    89→    registered: number
+    90→    90→    conversed: number
+    91→    91→    subscribed: number
+    92→    92→    convRateRegToConv: number
+    93→    93→    convRateConvToSub: number
+    94→    94→    convRateOverall: number
+    95→    95→  }
+    96→    96→  apiCost: {
+    97→    97→    totalMessages: number
+    98→    98→    userMessages: number
+    99→    99→    assistantMessages: number
+   100→   100→    costPerMessage: number
+   101→   101→    estimatedCostCny: number
+   102→   102→  }
+   103→   103→}
+   104→   104→
+   105→   105→export default function AdminPanel() {
+   106→   106→  const [authenticated, setAuthenticated] = useState(false)
+   107→   107→  const [loading, setLoading] = useState(true)
+   108→   108→  const [loginForm, setLoginForm] = useState({ email: '', password: '' })
+   109→   109→  const [loginError, setLoginError] = useState('')
+   110→   110→  const [stats, setStats] = useState<Stats | null>(null)
+   111→   111→  const [activeTab, setActiveTab] = useState<'dashboard' | 'users' | 'subscriptions' | 'marketing' | 'crisis' | 'settings' | 'analytics' | 'philosophers'>('dashboard')
+   112→   112→  const [users, setUsers] = useState<any[]>([])
+   113→   113→  const [subscriptions, setSubscriptions] = useState<any[]>([])
+   114→   114→  const [crisisLogs, setCrisisLogs] = useState<any[]>([])
+   115→   115→  const [siteConfig, setSiteConfig] = useState<SiteConfig | null>(null)
+   116→   116→  const [configForm, setConfigForm] = useState<{
+   117→   117→    siteName: string
+   118→   118→    announcement: string
+   119→   119→    bannerText: string
+   120→   120→    bannerEnabled: boolean
+   121→   121→    contactEmail: string
+   122→   122→    llmProvider: 'zhipu' | 'deepseek' | 'zai'
+   123→   123→    zhipuApiKey: string
+   124→   124→    deepseekApiKey: string
+   125→   125→  }>({
+   126→   126→    siteName: '',
+   127→   127→    announcement: '',
+   128→   128→    bannerText: '',
+   129→   129→    bannerEnabled: false,
+   130→   130→    contactEmail: '',
+   131→   131→    llmProvider: 'zhipu',
+   132→   132→    zhipuApiKey: '',
+   133→   133→    deepseekApiKey: '',
+   134→   134→  })
+   135→   135→  const [configSaving, setConfigSaving] = useState(false)
+   136→   136→  const [configSaved, setConfigSaved] = useState(false)
+   137→   137→  const [configError, setConfigError] = useState('')
+   138→   138→  const [analytics, setAnalytics] = useState<Analytics | null>(null)
+   139→   139→  const [analyticsLoading, setAnalyticsLoading] = useState(false)
+   140→   140→  const [coupons, setCoupons] = useState<Coupon[]>([])
+   141→   141→  const [couponsLoading, setCouponsLoading] = useState(false)
+   142→   142→  const [couponFormOpen, setCouponFormOpen] = useState(false)
+   143→   143→  const [couponForm, setCouponForm] = useState<{
+   144→   144→    code: string
+   145→   145→    discountType: 'percentage' | 'fixed'
+   146→   146→    discountValue: string
+   147→   147→    planId: string
+   148→   148→    maxUses: string
+   149→   149→    expiresAt: string
+   150→   150→  }>({
+   151→   151→    code: '',
+   152→   152→    discountType: 'percentage',
+   153→   153→    discountValue: '',
+   154→   154→    planId: '',
+   155→   155→    maxUses: '100',
+   156→   156→    expiresAt: '',
+   157→   157→  })
+   158→   158→  const [couponSubmitting, setCouponSubmitting] = useState(false)
+   159→   159→  const [couponError, setCouponError] = useState('')
+   160→   160→
+   161→   161→  // ===== 哲学家管理状态 =====
+   162→   162→  type PhilosopherListItem = {
+   163→   163→    id: string
+   164→   164→    nameCn: string
+   165→   165→    nameEn: string
+   166→   166→    slug: string
+   167→   167→    era: string
+   168→   168→    category: string
+   169→   169→    avatarUrl: string
+   170→   170→    tagline: string
+   171→   171→    order: number
+   172→   172→    published: boolean
+   173→   173→    isHost: boolean
+   174→   174→    createdAt: string
+   175→   175→    updatedAt: string
+   176→   176→    _count?: { conversations: number }
+   177→   177→  }
+   178→   178→  const [philosophers, setPhilosophers] = useState<PhilosopherListItem[]>([])
+   179→   179→  const [philosophersLoading, setPhilosophersLoading] = useState(false)
+   180→   180→  const [philosophersPagination, setPhilosophersPagination] = useState<{ page: number; pageSize: number; total: number; totalPages: number }>({ page: 1, pageSize: 50, total: 0, totalPages: 1 })
+   181→   181→  const [philosopherSearch, setPhilosopherSearch] = useState('')
+   182→   182→  const [philosopherEra, setPhilosopherEra] = useState('all')
+   183→   183→  const [philosopherCategory, setPhilosopherCategory] = useState('all')
+   184→   184→  const [editingPhilosopher, setEditingPhilosopher] = useState<any | null>(null)
+   185→   185→  const [philosopherSaving, setPhilosopherSaving] = useState(false)
+   186→   186→  const [philosopherError, setPhilosopherError] = useState('')
+   187→   187→  const [deletingPhilosopher, setDeletingPhilosopher] = useState<PhilosopherListItem | null>(null)
+   188→   188→
+   189→   189→  // 检查登录状态
+   190→   190→  useEffect(() => {
+   191→   191→    fetch('/api/admin/login').then(res => res.json()).then(data => {
+   192→   192→      if (data.authenticated) {
+   193→   193→        setAuthenticated(true)
+   194→   194→        loadStats()
+   195→   195→      }
+   196→   196→      setLoading(false)
+   197→   197→    }).catch(() => setLoading(false))
+   198→   198→  }, [])
+   199→   199→
+   200→   200→  const handleLogin = async (e: React.FormEvent) => {
+   201→   201→    e.preventDefault()
+   202→   202→    setLoginError('')
+   203→   203→    try {
+   204→   204→      const res = await fetch('/api/admin/login', {
+   205→   205→        method: 'POST',
+   206→   206→        headers: { 'Content-Type': 'application/json' },
+   207→   207→        body: JSON.stringify(loginForm),
+   208→   208→      })
+   209→   209→      const data = await res.json()
+   210→   210→      if (res.ok) {
+   211→   211→        setAuthenticated(true)
+   212→   212→        loadStats()
+   213→   213→      } else {
+   214→   214→        setLoginError(data.error || '登录失败')
+   215→   215→      }
+   216→   216→    } catch {
+   217→   217→      setLoginError('网络错误')
+   218→   218→    }
+   219→   219→  }
+   220→   220→
+   221→   221→  const handleLogout = async () => {
+   222→   222→    await fetch('/api/admin/login', { method: 'DELETE' }).catch(() => {})
+   223→   223→    document.cookie = 'admin_token=; path=/; max-age=0'
+   224→   224→    setAuthenticated(false)
+   225→   225→    setStats(null)
+   226→   226→  }
+   227→   227→
+   228→   228→  const loadStats = async () => {
+   229→   229→    try {
+   230→   230→      const res = await fetch('/api/admin/stats')
+   231→   231→      if (res.ok) setStats(await res.json())
+   232→   232→    } catch {}
+   233→   233→  }
+   234→   234→
+   235→   235→  const loadUsers = async () => {
+   236→   236→    try {
+   237→   237→      const res = await fetch('/api/admin/users')
+   238→   238→      if (res.ok) {
+   239→   239→        const data = await res.json()
+   240→   240→        setUsers(data.users)
+   241→   241→      }
+   242→   242→    } catch {}
+   243→   243→  }
+   244→   244→
+   245→   245→  const loadSubscriptions = async () => {
+   246→   246→    try {
+   247→   247→      const res = await fetch('/api/admin/subscriptions')
+   248→   248→      if (res.ok) {
+   249→   249→        const data = await res.json()
+   250→   250→        setSubscriptions(data.subscriptions)
+   251→   251→      }
+   252→   252→    } catch {}
+   253→   253→  }
+   254→   254→
+   255→   255→  const loadCrisisLogs = async () => {
+   256→   256→    try {
+   257→   257→      const res = await fetch('/api/admin/crisis-logs')
+   258→   258→      if (res.ok) {
+   259→   259→        const data = await res.json()
+   260→   260→        setCrisisLogs(data.logs)
+   261→   261→      }
+   262→   262→    } catch {}
+   263→   263→  }
+   264→   264→
+   265→   265→  const loadSiteConfig = async () => {
+   266→   266→    try {
+   267→   267→      const res = await fetch('/api/admin/site-config')
+   268→   268→      if (res.ok) {
+   269→   269→        const data = await res.json()
+   270→   270→        const cfg = data.config as SiteConfig
+   271→   271→        setSiteConfig(cfg)
+   272→   272→        setConfigForm({
+   273→   273→          siteName: cfg.siteName || '',
+   274→   274→          announcement: cfg.announcement || '',
+   275→   275→          bannerText: cfg.bannerText || '',
+   276→   276→          bannerEnabled: !!cfg.bannerEnabled,
+   277→   277→          contactEmail: cfg.contactEmail || '',
+   278→   278→          llmProvider: cfg.llmProvider || 'zhipu',
+   279→   279→          zhipuApiKey: cfg.zhipuApiKey || '',
+   280→   280→          deepseekApiKey: cfg.deepseekApiKey || '',
+   281→   281→        })
+   282→   282→      }
+   283→   283→    } catch {}
+   284→   284→  }
+   285→   285→
+   286→   286→  const saveSiteConfig = async () => {
+   287→   287→    setConfigSaving(true)
+   288→   288→    setConfigSaved(false)
+   289→   289→    setConfigError('')
+   290→   290→    try {
+   291→   291→      const res = await fetch('/api/admin/site-config', {
+   292→   292→        method: 'PUT',
+   293→   293→        headers: { 'Content-Type': 'application/json' },
+   294→   294→        body: JSON.stringify(configForm),
+   295→   295→      })
+   296→   296→      const data = await res.json()
+   297→   297→      if (res.ok) {
+   298→   298→        const cfg = data.config as SiteConfig
+   299→   299→        setSiteConfig(cfg)
+   300→   300→        setConfigSaved(true)
+   301→   301→        setTimeout(() => setConfigSaved(false), 3000)
+   302→   302→      } else {
+   303→   303→        setConfigError(data.error || '保存失败')
+   304→   304→      }
+   305→   305→    } catch {
+   306→   306→      setConfigError('网络错误')
+   307→   307→    } finally {
+   308→   308→      setConfigSaving(false)
+   309→   309→    }
+   310→   310→  }
+   311→   311→
+   312→   312→  const loadAnalytics = async () => {
+   313→   313→    setAnalyticsLoading(true)
+   314→   314→    try {
+   315→   315→      const res = await fetch('/api/admin/analytics')
+   316→   316→      if (res.ok) setAnalytics(await res.json())
+   317→   317→    } catch {} finally {
+   318→   318→      setAnalyticsLoading(false)
+   319→   319→    }
+   320→   320→  }
+   321→   321→
+   322→   322→  const loadCoupons = async () => {
+   323→   323→    setCouponsLoading(true)
+   324→   324→    try {
+   325→   325→      const res = await fetch('/api/admin/coupons')
+   326→   326→      if (res.ok) {
+   327→   327→        const data = await res.json()
+   328→   328→        setCoupons(data.coupons || [])
+   329→   329→      }
+   330→   330→    } catch {} finally {
+   331→   331→      setCouponsLoading(false)
+   332→   332→    }
+   333→   333→  }
+   334→   334→
+   335→   335→  const generateCouponCode = () => {
+   336→   336→    // 生成 8 位随机优惠码（大写字母+数字，去除易混淆字符）
+   337→   337→    const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'
+   338→   338→    let code = ''
+   339→   339→    for (let i = 0; i < 8; i++) {
+   340→   340→      code += chars.charAt(Math.floor(Math.random() * chars.length))
+   341→   341→    }
+   342→   342→    setCouponForm(prev => ({ ...prev, code }))
+   343→   343→  }
+   344→   344→
+   345→   345→  const submitCoupon = async (e: React.FormEvent) => {
+   346→   346→    e.preventDefault()
+   347→   347→    setCouponError('')
+   348→   348→    if (!couponForm.code.trim()) {
+   349→   349→      setCouponError('请填写或生成优惠码')
+   350→   350→      return
+   351→   351→    }
+   352→   352→    if (couponForm.code.trim().length < 3) {
+   353→   353→      setCouponError('优惠码至少需要 3 个字符')
+   354→   354→      return
+   355→   355→    }
+   356→   356→    const dv = Number(couponForm.discountValue)
+   357→   357→    if (!Number.isFinite(dv) || dv <= 0) {
+   358→   358→      setCouponError('请输入有效的折扣值')
+   359→   359→      return
+   360→   360→    }
+   361→   361→    if (couponForm.discountType === 'percentage' && dv > 100) {
+   362→   362→      setCouponError('百分比折扣不能超过 100')
+   363→   363→      return
+   364→   364→    }
+   365→   365→    setCouponSubmitting(true)
+   366→   366→    try {
+   367→   367→      const payload: Record<string, unknown> = {
+   368→   368→        code: couponForm.code.trim(),
+   369→   369→        discountType: couponForm.discountType,
+   370→   370→        discountValue: dv,
+   371→   371→        planId: couponForm.planId,
+   372→   372→        maxUses: Number(couponForm.maxUses) > 0 ? Number(couponForm.maxUses) : 100,
+   373→   373→      }
+   374→   374→      if (couponForm.expiresAt) {
+   375→   375→        payload.expiresAt = new Date(couponForm.expiresAt).toISOString()
+   376→   376→      }
+   377→   377→      const res = await fetch('/api/admin/coupons', {
+   378→   378→        method: 'POST',
+   379→   379→        headers: { 'Content-Type': 'application/json' },
+   380→   380→        body: JSON.stringify(payload),
+   381→   381→      })
+   382→   382→      const data = await res.json()
+   383→   383→      if (res.ok) {
+   384→   384→        setCouponFormOpen(false)
+   385→   385→        setCouponForm({
+   386→   386→          code: '',
+   387→   387→          discountType: 'percentage',
+   388→   388→          discountValue: '',
+   389→   389→          planId: '',
+   390→   390→          maxUses: '100',
+   391→   391→          expiresAt: '',
+   392→   392→        })
+   393→   393→        await loadCoupons()
+   394→   394→      } else {
+   395→   395→        setCouponError(data.error || '创建失败')
+   396→   396→      }
+   397→   397→    } catch {
+   398→   398→      setCouponError('网络错误')
+   399→   399→    } finally {
+   400→   400→      setCouponSubmitting(false)
+   401→   401→    }
+   402→   402→  }
+   403→   403→
+   404→   404→  const toggleCouponActive = async (coupon: Coupon) => {
+   405→   405→    try {
+   406→   406→      const res = await fetch(`/api/admin/coupons/${coupon.id}`, {
+   407→   407→        method: 'PUT',
+   408→   408→        headers: { 'Content-Type': 'application/json' },
+   409→   409→        body: JSON.stringify({ active: !coupon.active }),
+   410→   410→      })
+   411→   411→      if (res.ok) {
+   412→   412→        await loadCoupons()
+   413→   413→      }
+   414→   414→    } catch {}
+   415→   415→  }
+   416→   416→
+   417→   417→  const deleteCoupon = async (coupon: Coupon) => {
+   418→   418→    if (!confirm(`确定要删除优惠码 "${coupon.code}" 吗？此操作不可撤销。`)) return
+   419→   419→    try {
+   420→   420→      const res = await fetch(`/api/admin/coupons/${coupon.id}`, { method: 'DELETE' })
+   421→   421→      if (res.ok) {
+   422→   422→        await loadCoupons()
+   423→   423→      }
+   424→   424→    } catch {}
+   425→   425→  }
+   426→   426→
+   427→   427→  // ===== 哲学家管理操作 =====
+   428→   428→  const loadPhilosophers = async () => {
+   429→   429→    setPhilosophersLoading(true)
+   430→   430→    try {
+   431→   431→      const params = new URLSearchParams()
+   432→   432→      params.set('page', String(philosophersPagination.page))
+   433→   433→      params.set('pageSize', String(philosophersPagination.pageSize))
+   434→   434→      if (philosopherSearch.trim()) params.set('search', philosopherSearch.trim())
+   435→   435→      if (philosopherEra && philosopherEra !== 'all') params.set('era', philosopherEra)
+   436→   436→      if (philosopherCategory && philosopherCategory !== 'all') params.set('category', philosopherCategory)
+   437→   437→      const res = await fetch(`/api/admin/philosophers?${params.toString()}`)
+   438→   438→      if (res.ok) {
+   439→   439→        const data = await res.json()
+   440→   440→        setPhilosophers(data.philosophers || [])
+   441→   441→        setPhilosophersPagination(data.pagination || { page: 1, pageSize: 50, total: 0, totalPages: 1 })
+   442→   442→      }
+   443→   443→    } catch {} finally {
+   444→   444→      setPhilosophersLoading(false)
+   445→   445→    }
+   446→   446→  }
+   447→   447→
+   448→   448→  const updateEditingField = (field: string, value: any) => {
+   449→   449→    setEditingPhilosopher(prev => (prev ? { ...prev, [field]: value } : prev))
+   450→   450→  }
+   451→   451→
+   452→   452→  const openCreatePhilosopher = () => {
+   453→   453→    setPhilosopherError('')
+   454→   454→    setEditingPhilosopher({
+   455→   455→      nameCn: '',
+   456→   456→      nameEn: '',
+   457→   457→      slug: '',
+   458→   458→      era: '古典',
+   459→   459→      category: '综合类',
+   460→   460→      tagline: '',
+   461→   461→      bioSummary: '',
+   462→   462→      coreInsight: '',
+   463→   463→      description: '',
+   464→   464→      systemPrompt: '',
+   465→   465→      quote: '',
+   466→   466→      quoteSource: '',
+   467→   467→      works: '',
+   468→   468→      worries: '',
+   469→   469→      avatarUrl: '',
+   470→   470→      order: 0,
+   471→   471→      published: true,
+   472→   472→      isHost: false,
+   473→   473→    })
+   474→   474→  }
+   475→   475→
+   476→   476→  const openEditPhilosopher = async (p: PhilosopherListItem) => {
+   477→   477→    setPhilosopherError('')
+   478→   478→    try {
+   479→   479→      const res = await fetch(`/api/admin/philosophers/${p.id}`)
+   480→   480→      if (res.ok) {
+   481→   481→        const data = await res.json()
+   482→   482→        setEditingPhilosopher(data.philosopher)
+   483→   483→        return
+   484→   484→      }
+   485→   485→    } catch {}
+   486→   486→    // 兜底使用列表项数据
+   487→   487→    setEditingPhilosopher({ ...p })
+   488→   488→  }
+   489→   489→
+   490→   490→  const savePhilosopher = async () => {
+   491→   491→    if (!editingPhilosopher) return
+   492→   492→    setPhilosopherSaving(true)
+   493→   493→    setPhilosopherError('')
+   494→   494→    try {
+   495→   495→      const payload: any = { ...editingPhilosopher }
+   496→   496→      // 剔除不可写字段
+   497→   497→      delete payload._count
+   498→   498→      delete payload.createdAt
+   499→   499→      delete payload.updatedAt
+   500→   500→      const isEdit = !!payload.id
+   501→   501→      const id = payload.id
+   502→   502→      delete payload.id
+   503→   503→      const url = isEdit ? `/api/admin/philosophers/${id}` : '/api/admin/philosophers'
+   504→   504→      const method = isEdit ? 'PUT' : 'POST'
+   505→   505→      const res = await fetch(url, {
+   506→   506→        method,
+   507→   507→        headers: { 'Content-Type': 'application/json' },
+   508→   508→        body: JSON.stringify(payload),
+   509→   509→      })
+   510→   510→      const data = await res.json().catch(() => ({}))
+   511→   511→      if (res.ok) {
+   512→   512→        setEditingPhilosopher(null)
+   513→   513→        loadPhilosophers()
+   514→   514→      } else {
+   515→   515→        setPhilosopherError(data.error || '保存失败')
+   516→   516→      }
+   517→   517→    } catch {
+   518→   518→      setPhilosopherError('网络错误')
+   519→   519→    } finally {
+   520→   520→      setPhilosopherSaving(false)
+   521→   521→    }
+   522→   522→  }
+   523→   523→
+   524→   524→  const deletePhilosopher = async (p: PhilosopherListItem | null) => {
+   525→   525→    if (!p) return
+   526→   526→    setPhilosopherSaving(true)
+   527→   527→    setPhilosopherError('')
+   528→   528→    try {
+   529→   529→      const res = await fetch(`/api/admin/philosophers/${p.id}`, { method: 'DELETE' })
+   530→   530→      const data = await res.json().catch(() => ({}))
+   531→   531→      if (res.ok) {
+   532→   532→        setDeletingPhilosopher(null)
+   533→   533→        loadPhilosophers()
+   534→   534→      } else {
+   535→   535→        setPhilosopherError(data.error || '删除失败')
+   536→   536→        setDeletingPhilosopher(null)
+   537→   537→      }
+   538→   538→    } catch {
+   539→   539→      setPhilosopherError('网络错误')
+   540→   540→      setDeletingPhilosopher(null)
+   541→   541→    } finally {
+   542→   542→      setPhilosopherSaving(false)
+   543→   543→    }
+   544→   544→  }
+   545→   545→
+   546→   546→  useEffect(() => {
+   547→   547→    if (authenticated) {
+   548→   548→      if (activeTab === 'users') loadUsers()
+   549→   549→      else if (activeTab === 'subscriptions') loadSubscriptions()
+   550→   550→      else if (activeTab === 'marketing') {
+   551→   551→        loadCoupons()
+   552→   552→        if (!stats) loadStats()
+   553→   553→      }
+   554→   554→      else if (activeTab === 'crisis') loadCrisisLogs()
+   555→   555→      else if (activeTab === 'settings') loadSiteConfig()
+   556→   556→      else if (activeTab === 'analytics') loadAnalytics()
+   557→   557→      else if (activeTab === 'philosophers') {
+   558→   558→        // 由专门的筛选 useEffect 处理（含首次加载）
+   559→   559→      }
+   560→   560→      else loadStats()
+   561→   561→    }
+   562→   562→  }, [activeTab, authenticated])
+   563→   563→
+   564→   564→  // 哲学家列表筛选/搜索/分页变化时重新加载（含 tab 切换首次加载）
+   565→   565→  useEffect(() => {
+   566→   566→    if (!authenticated || activeTab !== 'philosophers') return
+   567→   567→    const h = setTimeout(() => {
+   568→   568→      loadPhilosophers()
+   569→   569→    }, 250)
+   570→   570→    return () => clearTimeout(h)
+   571→   571→  }, [authenticated, activeTab, philosopherSearch, philosopherEra, philosopherCategory, philosophersPagination.page, philosophersPagination.pageSize])
+   572→   572→
+   573→   573→  if (loading) {
+   574→   574→    return (
+   575→   575→      <div className="min-h-screen flex items-center justify-center bg-gray-50">
+   576→   576→        <Loader2 className="size-8 animate-spin text-gray-400" />
+   577→   577→      </div>
+   578→   578→    )
+   579→   579→  }
+   580→   580→
+   581→   581→  if (!authenticated) {
+   582→   582→    return (
+   583→   583→      <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-gray-900 to-gray-800 p-4">
+   584→   584→        <motion.div
+   585→   585→          initial={{ opacity: 0, y: 20 }}
+   586→   586→          animate={{ opacity: 1, y: 0 }}
+   587→   587→          className="w-full max-w-md bg-white rounded-2xl shadow-2xl p-8"
+   588→   588→        >
+   589→   589→          <div className="text-center mb-8">
+   590→   590→            <div className="w-16 h-16 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center mx-auto mb-4">
+   591→   591→              <LayoutDashboard className="size-8 text-white" />
+   592→   592→            </div>
+   593→   593→            <h1 className="text-2xl font-bold text-gray-900">Mindway 管理后台</h1>
+   594→   594→            <p className="text-sm text-gray-500 mt-2">请输入管理员账号登录</p>
+   595→   595→          </div>
+   596→   596→          <form onSubmit={handleLogin} className="space-y-4">
+   597→   597→            <div>
+   598→   598→              <label className="text-sm font-medium text-gray-700 mb-1 block">管理员邮箱</label>
+   599→   599→              <Input
+   600→   600→                type="email"
+   601→   601→                value={loginForm.email}
+   602→   602→                onChange={(e) => setLoginForm({ ...loginForm, email: e.target.value })}
+   603→   603→                placeholder="piaoshu@mindway.life"
+   604→   604→                required
+   605→   605→                className="h-11"
+   606→   606→              />
+   607→   607→            </div>
+   608→   608→            <div>
+   609→   609→              <label className="text-sm font-medium text-gray-700 mb-1 block">密码</label>
+   610→   610→              <Input
+   611→   611→                type="password"
+   612→   612→                value={loginForm.password}
+   613→   613→                onChange={(e) => setLoginForm({ ...loginForm, password: e.target.value })}
+   614→   614→                placeholder="••••••••"
+   615→   615→                required
+   616→   616→                className="h-11"
+   617→   617→              />
+   618→   618→            </div>
+   619→   619→            {loginError && (
+   620→   620→              <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{loginError}</div>
+   621→   621→            )}
+   622→   622→            <Button type="submit" className="w-full h-11 bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white">
+   623→   623→              登录管理后台
+   624→   624→            </Button>
+   625→   625→          </form>
+   626→   626→          <div className="mt-6 text-center text-xs text-gray-400">
+   627→   627→            <p>测试账号：piaoshu@mindway.life</p>
+   628→   628→            <p>密码：Gai16999</p>
+   629→   629→          </div>
+   630→   630→        </motion.div>
+   631→   631→      </div>
+   632→   632→    )
+   633→   633→  }
+   634→   634→
+   635→   635→  return (
+   636→   636→    <div className="min-h-screen bg-gray-50">
+   637→   637→      {/* 顶栏 */}
+   638→   638→      <header className="bg-white border-b border-gray-200 sticky top-0 z-10">
+   639→   639→        <div className="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between">
+   640→   640→          <div className="flex items-center gap-3">
+   641→   641→            <div className="w-8 h-8 rounded-full bg-gradient-to-br from-amber-500 to-amber-700 flex items-center justify-center">
+   642→   642→              <LayoutDashboard className="size-4 text-white" />
+   643→   643→            </div>
+   644→   644→            <div>
+   645→   645→              <h1 className="font-bold text-gray-900">Mindway 管理后台</h1>
+   646→   646→              <p className="text-xs text-gray-500">mindway.life · 运营管理</p>
+   647→   647→            </div>
+   648→   648→          </div>
+   649→   649→          <div className="flex items-center gap-2">
+   650→   650→            <a href="https://mindway.life" target="_blank" rel="noopener noreferrer">
+   651→   651→              <Button variant="outline" size="sm">访问前台</Button>
+   652→   652→            </a>
+   653→   653→            <Button variant="ghost" size="sm" onClick={handleLogout}>
+   654→   654→              <LogOut className="size-4 mr-1" /> 退出
+   655→   655→            </Button>
+   656→   656→          </div>
+   657→   657→        </div>
+   658→   658→      </header>
+   659→   659→
+   660→   660→      {/* Tab栏 */}
+   661→   661→      <div className="bg-white border-b border-gray-200">
+   662→   662→        <div className="max-w-7xl mx-auto px-4 flex gap-1">
+   663→   663→          {[
+   664→   664→            { id: 'dashboard', label: '数据概览', icon: TrendingUp },
+   665→   665→            { id: 'analytics', label: '数据分析', icon: BarChart3 },
+   666→   666→            { id: 'users', label: '用户管理', icon: Users },
+   667→   667→            { id: 'philosophers', label: '哲学家管理', icon: BookOpen },
+   668→   668→            { id: 'subscriptions', label: '订阅支付', icon: CreditCard },
+   669→   669→            { id: 'marketing', label: '销售营销', icon: Megaphone },
+   670→   670→            { id: 'crisis', label: '危机干预', icon: AlertTriangle },
+   671→   671→            { id: 'settings', label: '系统设置', icon: Settings },
+   672→   672→          ].map(tab => {
+   673→   673→            const Icon = tab.icon
+   674→   674→            return (
+   675→   675→              <button
+   676→   676→                key={tab.id}
+   677→   677→                onClick={() => setActiveTab(tab.id as any)}
+   678→   678→                className={`flex items-center gap-2 px-4 py-3 text-sm font-medium border-b-2 transition-colors ${
+   679→   679→                  activeTab === tab.id
+   680→   680→                    ? 'border-amber-600 text-amber-700'
+   681→   681→                    : 'border-transparent text-gray-500 hover:text-gray-700'
+   682→   682→                }`}
+   683→   683→              >
+   684→   684→                <Icon className="size-4" />
+   685→   685→                {tab.label}
+   686→   686→              </button>
+   687→   687→            )
+   688→   688→          })}
+   689→   689→        </div>
+   690→   690→      </div>
+   691→   691→
+   692→   692→      {/* 内容区 */}
+   693→   693→      <main className="max-w-7xl mx-auto px-4 py-6">
+   694→   694→        {/* Dashboard */}
+   695→   695→        {activeTab === 'dashboard' && stats && (
+   696→   696→          <div className="space-y-6">
+   697→   697→            {/* 核心指标卡片 */}
+   698→   698→            <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   699→   699→              <StatCard icon={Users} label="总用户数" value={stats.users.total} sub={`今日 +${stats.users.today}`} color="blue" />
+   700→   700→              <StatCard icon={MessageSquare} label="对话总数" value={stats.conversations.total} sub={`今日 +${stats.conversations.today}`} color="green" />
+   701→   701→              <StatCard icon={Activity} label="消息总数" value={stats.messages.total} sub={`今日 +${stats.messages.today}`} color="purple" />
+   702→   702→              <StatCard icon={DollarSign} label="活跃订阅" value={stats.subscriptions.active} sub={`收入 ¥${(stats.subscriptions.revenue / 100).toFixed(2)}`} color="amber" />
+   703→   703→            </div>
+   704→   704→
+   705→   705→            {/* 用户分布 */}
+   706→   706→            <div className="grid md:grid-cols-2 gap-6">
+   707→   707→              <div className="bg-white rounded-xl border border-gray-200 p-6">
+   708→   708→                <h3 className="font-bold text-gray-900 mb-4">用户套餐分布</h3>
+   709→   709→                <div className="space-y-3">
+   710→   710→                  <div className="flex items-center justify-between">
+   711→   711→                    <span className="text-sm text-gray-600">免费版</span>
+   712→   712→                    <div className="flex items-center gap-2">
+   713→   713→                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+   714→   714→                        <div className="h-full bg-gray-400" style={{ width: `${(stats.users.free / stats.users.total) * 100}%` }} />
+   715→   715→                      </div>
+   716→   716→                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{stats.users.free}</span>
+   717→   717→                    </div>
+   718→   718→                  </div>
+   719→   719→                  <div className="flex items-center justify-between">
+   720→   720→                    <span className="text-sm text-gray-600">专业版 ¥49/月</span>
+   721→   721→                    <div className="flex items-center gap-2">
+   722→   722→                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+   723→   723→                        <div className="h-full bg-amber-500" style={{ width: `${(stats.users.pro / stats.users.total) * 100}%` }} />
+   724→   724→                      </div>
+   725→   725→                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{stats.users.pro}</span>
+   726→   726→                    </div>
+   727→   727→                  </div>
+   728→   728→                  <div className="flex items-center justify-between">
+   729→   729→                    <span className="text-sm text-gray-600">旗舰版 ¥99/月</span>
+   730→   730→                    <div className="flex items-center gap-2">
+   731→   731→                      <div className="w-32 h-2 bg-gray-100 rounded-full overflow-hidden">
+   732→   732→                        <div className="h-full bg-amber-700" style={{ width: `${(stats.users.premium / stats.users.total) * 100}%` }} />
+   733→   733→                      </div>
+   734→   734→                      <span className="text-sm font-medium text-gray-900 w-12 text-right">{stats.users.premium}</span>
+   735→   735→                    </div>
+   736→   736→                  </div>
+   737→   737→                </div>
+   738→   738→              </div>
+   739→   739→
+   740→   740→              <div className="bg-white rounded-xl border border-gray-200 p-6">
+   741→   741→                <h3 className="font-bold text-gray-900 mb-4">危机干预统计</h3>
+   742→   742→                <div className="grid grid-cols-3 gap-4">
+   743→   743→                  <div className="text-center">
+   744→   744→                    <p className="text-2xl font-bold text-gray-900">{stats.crisis.total}</p>
+   745→   745→                    <p className="text-xs text-gray-500 mt-1">总触发</p>
+   746→   746→                  </div>
+   747→   747→                  <div className="text-center">
+   748→   748→                    <p className="text-2xl font-bold text-red-600">{stats.crisis.severe}</p>
+   749→   749→                    <p className="text-xs text-gray-500 mt-1">严重级别</p>
+   750→   750→                  </div>
+   751→   751→                  <div className="text-center">
+   752→   752→                    <p className="text-2xl font-bold text-orange-600">{stats.crisis.unresolved}</p>
+   753→   753→                    <p className="text-xs text-gray-500 mt-1">待处理</p>
+   754→   754→                  </div>
+   755→   755→                </div>
+   756→   756→                {stats.crisis.unresolved > 0 && (
+   757→   757→                  <div className="mt-4 p-3 bg-red-50 rounded-lg">
+   758→   758→                    <p className="text-sm text-red-700">
+   759→   759→                      ⚠️ 有 {stats.crisis.unresolved} 条危机记录待处理，请前往"危机干预"查看
+   760→   760→                    </p>
+   761→   761→                  </div>
+   762→   762→                )}
+   763→   763→              </div>
+   764→   764→            </div>
+   765→   765→
+   766→   766→            {/* API调用统计 */}
+   767→   767→            <div className="bg-white rounded-xl border border-gray-200 p-6">
+   768→   768→              <h3 className="font-bold text-gray-900 mb-4">API调用统计（消息量）</h3>
+   769→   769→              <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+   770→   770→                <div>
+   771→   771→                  <p className="text-xs text-gray-500">用户消息</p>
+   772→   772→                  <p className="text-xl font-bold text-gray-900">{stats.messages.user}</p>
+   773→   773→                </div>
+   774→   774→                <div>
+   775→   775→                  <p className="text-xs text-gray-500">AI回复</p>
+   776→   776→                  <p className="text-xl font-bold text-gray-900">{stats.messages.assistant}</p>
+   777→   777→                </div>
+   778→   778→                <div>
+   779→   779→                  <p className="text-xs text-gray-500">哲学家数</p>
+   780→   780→                  <p className="text-xl font-bold text-gray-900">{stats.philosophers.total}</p>
+   781→   781→                </div>
+   782→   782→                <div>
+   783→   783→                  <p className="text-xs text-gray-500">心智洞察</p>
+   784→   784→                  <p className="text-xl font-bold text-gray-900">{stats.insights}</p>
+   785→   785→                </div>
+   786→   786→              </div>
+   787→   787→            </div>
+   788→   788→
+   789→   789→            {/* 最近对话 */}
+   790→   790→            <div className="bg-white rounded-xl border border-gray-200 p-6">
+   791→   791→              <h3 className="font-bold text-gray-900 mb-4">最近对话</h3>
+   792→   792→              <div className="space-y-2 max-h-64 overflow-y-auto">
+   793→   793→                {stats.recentConversations.map(conv => (
+   794→   794→                  <div key={conv.id} className="flex items-center gap-3 p-2 hover:bg-gray-50 rounded-lg">
+   795→   795→                    {conv.philosopherAvatar && (
+   796→   796→                      <img src={conv.philosopherAvatar} alt="" className="size-8 rounded-full" />
+   797→   797→                    )}
+   798→   798→                    <div className="flex-1 min-w-0">
+   799→   799→                      <p className="text-sm font-medium text-gray-900">{conv.philosopherName}</p>
+   800→   800→                      <p className="text-xs text-gray-500">
+   801→   801→                        {conv.messageCount} 条消息 · {new Date(conv.createdAt).toLocaleString('zh-CN')}
+   802→   802→                      </p>
+   803→   803→                    </div>
+   804→   804→                    <Badge variant={conv.mode === 'debate' ? 'default' : 'secondary'} className="text-xs">
+   805→   805→                      {conv.mode === 'debate' ? '辩论' : '对话'}
+   806→   806→                    </Badge>
+   807→   807→                  </div>
+   808→   808→                ))}
+   809→   809→              </div>
+   810→   810→            </div>
+   811→   811→          </div>
+   812→   812→        )}
+   813→   813→
+   814→   814→        {/* Users */}
+   815→   815→        {activeTab === 'users' && (
+   816→   816→          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+   817→   817→            <div className="p-4 border-b border-gray-200">
+   818→   818→              <h3 className="font-bold text-gray-900">用户管理（共 {users.length} 位）</h3>
+   819→   819→            </div>
+   820→   820→            <div className="overflow-x-auto">
+   821→   821→              <table className="w-full text-sm">
+   822→   822→                <thead className="bg-gray-50">
+   823→   823→                  <tr>
+   824→   824→                    <th className="text-left p-3 font-medium text-gray-600">用户</th>
+   825→   825→                    <th className="text-left p-3 font-medium text-gray-600">邮箱</th>
+   826→   826→                    <th className="text-left p-3 font-medium text-gray-600">套餐</th>
+   827→   827→                    <th className="text-left p-3 font-medium text-gray-600">角色</th>
+   828→   828→                    <th className="text-right p-3 font-medium text-gray-600">对话数</th>
+   829→   829→                    <th className="text-right p-3 font-medium text-gray-600">消息数</th>
+   830→   830→                    <th className="text-left p-3 font-medium text-gray-600">注册时间</th>
+   831→   831→                  </tr>
+   832→   832→                </thead>
+   833→   833→                <tbody>
+   834→   834→                  {users.map(u => (
+   835→   835→                    <tr key={u.id} className="border-t border-gray-100 hover:bg-gray-50">
+   836→   836→                      <td className="p-3">
+   837→   837→                        <div className="font-medium text-gray-900">{u.name}</div>
+   838→   838→                      </td>
+   839→   839→                      <td className="p-3 text-gray-600">{u.email}</td>
+   840→   840→                      <td className="p-3">
+   841→   841→                        <Badge variant={u.plan === 'premium' ? 'default' : u.plan === 'pro' ? 'secondary' : 'outline'}>
+   842→   842→                          {u.plan === 'free' ? '免费' : u.plan === 'pro' ? '专业¥49' : u.plan === 'premium' ? '旗舰¥99' : u.plan}
+   843→   843→                        </Badge>
+   844→   844→                      </td>
+   845→   845→                      <td className="p-3">
+   846→   846→                        {u.role === 'admin' ? (
+   847→   847→                          <Badge className="bg-red-100 text-red-700">管理员</Badge>
+   848→   848→                        ) : (
+   849→   849→                          <span className="text-gray-400">用户</span>
+   850→   850→                        )}
+   851→   851→                      </td>
+   852→   852→                      <td className="p-3 text-right text-gray-600">{u.conversationCount}</td>
+   853→   853→                      <td className="p-3 text-right text-gray-600">{u.messageCount}</td>
+   854→   854→                      <td className="p-3 text-gray-500 text-xs">{new Date(u.createdAt).toLocaleDateString('zh-CN')}</td>
+   855→   855→                    </tr>
+   856→   856→                  ))}
+   857→   857→                </tbody>
+   858→   858→              </table>
+   859→   859→            </div>
+   860→   860→          </div>
+   861→   861→        )}
+   862→   862→
+   863→   863→        {/* Subscriptions */}
+   864→   864→        {activeTab === 'subscriptions' && (
+   865→   865→          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+   866→   866→            <div className="p-4 border-b border-gray-200">
+   867→   867→              <h3 className="font-bold text-gray-900">订阅支付记录（共 {subscriptions.length} 条）</h3>
+   868→   868→            </div>
+   869→   869→            <div className="overflow-x-auto">
+   870→   870→              <table className="w-full text-sm">
+   871→   871→                <thead className="bg-gray-50">
+   872→   872→                  <tr>
+   873→   873→                    <th className="text-left p-3 font-medium text-gray-600">用户</th>
+   874→   874→                    <th className="text-left p-3 font-medium text-gray-600">套餐</th>
+   875→   875→                    <th className="text-right p-3 font-medium text-gray-600">金额</th>
+   876→   876→                    <th className="text-left p-3 font-medium text-gray-600">周期</th>
+   877→   877→                    <th className="text-left p-3 font-medium text-gray-600">状态</th>
+   878→   878→                    <th className="text-left p-3 font-medium text-gray-600">支付方式</th>
+   879→   879→                    <th className="text-left p-3 font-medium text-gray-600">订单号</th>
+   880→   880→                    <th className="text-left p-3 font-medium text-gray-600">时间</th>
+   881→   881→                  </tr>
+   882→   882→                </thead>
+   883→   883→                <tbody>
+   884→   884→                  {subscriptions.map(s => (
+   885→   885→                    <tr key={s.id} className="border-t border-gray-100 hover:bg-gray-50">
+   886→   886→                      <td className="p-3 text-gray-900">{s.user?.name || '未知'}</td>
+   887→   887→                      <td className="p-3">
+   888→   888→                        <Badge variant="outline">{s.plan === 'pro' ? '专业¥49' : '旗舰¥99'}</Badge>
+   889→   889→                      </td>
+   890→   890→                      <td className="p-3 text-right font-medium">¥{(s.amount / 100).toFixed(2)}</td>
+   891→   891→                      <td className="p-3 text-gray-600">{s.interval === 'year' ? '年付' : '月付'}</td>
+   892→   892→                      <td className="p-3">
+   893→   893→                        <Badge className={s.status === 'active' ? 'bg-green-100 text-green-700' : 'bg-yellow-100 text-yellow-700'}>
+   894→   894→                          {s.status === 'active' ? '已激活' : s.status === 'pending' ? '待支付' : s.status}
+   895→   895→                        </Badge>
+   896→   896→                      </td>
+   897→   897→                      <td className="p-3 text-gray-600">{s.paymentMethod === 'wechat' ? '微信' : s.paymentMethod === 'alipay' ? '支付宝' : s.paymentMethod}</td>
+   898→   898→                      <td className="p-3 text-xs text-gray-500 font-mono">{s.transactionId?.slice(0, 20)}...</td>
+   899→   899→                      <td className="p-3 text-gray-500 text-xs">{new Date(s.createdAt).toLocaleString('zh-CN')}</td>
+   900→   900→                    </tr>
+   901→   901→                  ))}
+   902→   902→                </tbody>
+   903→   903→              </table>
+   904→   904→            </div>
+   905→   905→          </div>
+   906→   906→        )}
+   907→   907→
+   908→   908→        {/* Marketing - 销售营销 */}
+   909→   909→        {activeTab === 'marketing' && (
+   910→   910→          <div className="space-y-6">
+   911→   911→            {/* 转化概览 */}
+   912→   912→            <div>
+   913→   913→              <h3 className="font-bold text-gray-900 mb-3 flex items-center gap-2">
+   914→   914→                <TrendingUp className="size-5 text-amber-600" />
+   915→   915→                转化概览
+   916→   916→              </h3>
+   917→   917→              <div className="grid grid-cols-2 md:grid-cols-5 gap-4">
+   918→   918→                {(() => {
+   919→   919→                  const totalUsers = stats?.users.total ?? 0
+   920→   920→                  const payingUsers = (stats?.users.pro ?? 0) + (stats?.users.premium ?? 0)
+   921→   921→                  const activeSubs = stats?.subscriptions.active ?? 0
+   922→   922→                  const revenueYuan = (stats?.subscriptions.revenue ?? 0) / 100
+   923→   923→                  const visitors = totalUsers // 访客数近似
+   924→   924→                  const regRate = visitors > 0 ? 100 : 0 // 因访客数用注册数近似, 转化率为100%
+   925→   925→                  const payRate = totalUsers > 0 ? (payingUsers / totalUsers) * 100 : 0
+   926→   926→                  const arpu = activeSubs > 0 ? revenueYuan / activeSubs : 0
+   927→   927→                  const monthlyRevenue = revenueYuan // 月收入估算(基于活跃订阅金额)
+   928→   928→                  return (
+   929→   929→                    <>
+   930→   930→                      <MetricCard icon={Users} label="访客数" value={visitors.toLocaleString()} sub="近似值" color="blue" />
+   931→   931→                      <MetricCard icon={CheckCircle2} label="注册转化率" value={`${regRate.toFixed(1)}%`} sub="近似计算" color="green" />
+   932→   932→                      <MetricCard icon={CreditCard} label="付费转化率" value={`${payRate.toFixed(1)}%`} sub={`${payingUsers}/${totalUsers}`} color="purple" />
+   933→   933→                      <MetricCard icon={DollarSign} label="平均客单价" value={`¥${arpu.toFixed(2)}`} sub="基于活跃订阅" color="amber" />
+   934→   934→                      <MetricCard icon={TrendingUp} label="月收入估算" value={`¥${monthlyRevenue.toFixed(2)}`} sub="活跃订阅总额" color="emerald" />
+   935→   935→                    </>
+   936→   936→                  )
+   937→   937→                })()}
+   938→   938→              </div>
+   939→   939→              <p className="text-xs text-gray-400 mt-2">
+   940→   940→                * 访客数无独立追踪，暂用总注册用户数近似；注册转化率因近似关系显示为 100%，实际值需接入埋点后获取。
+   941→   941→              </p>
+   942→   942→            </div>
+   943→   943→
+   944→   944→            {/* 优惠券管理 */}
+   945→   945→            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+   946→   946→              <div className="p-4 border-b border-gray-200 flex items-center justify-between flex-wrap gap-2">
+   947→   947→                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+   948→   948→                  <Ticket className="size-5 text-amber-600" />
+   949→   949→                  优惠券管理（共 {coupons.length} 张）
+   950→   950→                </h3>
+   951→   951→                <div className="flex items-center gap-2">
+   952→   952→                  <Button variant="outline" size="sm" onClick={loadCoupons} disabled={couponsLoading}>
+   953→   953→                    <RefreshCw className={`size-4 mr-1 ${couponsLoading ? 'animate-spin' : ''}`} />
+   954→   954→                    刷新
+   955→   955→                  </Button>
+   956→   956→                  <Button
+   957→   957→                    size="sm"
+   958→   958→                    className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white"
+   959→   959→                    onClick={() => {
+   960→   960→                      setCouponFormOpen(v => !v)
+   961→   961→                      setCouponError('')
+   962→   962→                    }}
+   963→   963→                  >
+   964→   964→                    <Plus className="size-4 mr-1" />
+   965→   965→                    创建优惠券
+   966→   966→                  </Button>
+   967→   967→                </div>
+   968→   968→              </div>
+   969→   969→
+   970→   970→              {/* 创建优惠券表单 */}
+   971→   971→              {couponFormOpen && (
+   972→   972→                <form onSubmit={submitCoupon} className="p-4 bg-amber-50/50 border-b border-gray-200 space-y-3">
+   973→   973→                  <div className="grid grid-cols-1 md:grid-cols-3 gap-3">
+   974→   974→                    <div>
+   975→   975→                      <label className="text-xs font-medium text-gray-700 mb-1 block">优惠码 *</label>
+   976→   976→                      <div className="flex gap-2">
+   977→   977→                        <Input
+   978→   978→                          value={couponForm.code}
+   979→   979→                          onChange={(e) => setCouponForm(prev => ({ ...prev, code: e.target.value.toUpperCase() }))}
+   980→   980→                          placeholder="如 NEWYEAR30"
+   981→   981→                          className="font-mono uppercase"
+   982→   982→                        />
+   983→   983→                        <Button type="button" variant="outline" size="sm" onClick={generateCouponCode}>
+   984→   984→                          随机生成
+   985→   985→                        </Button>
+   986→   986→                      </div>
+   987→   987→                    </div>
+   988→   988→                    <div>
+   989→   989→                      <label className="text-xs font-medium text-gray-700 mb-1 block">折扣类型 *</label>
+   990→   990→                      <Select
+   991→   991→                        value={couponForm.discountType}
+   992→   992→                        onValueChange={(v: 'percentage' | 'fixed') => setCouponForm(prev => ({ ...prev, discountType: v }))}
+   993→   993→                      >
+   994→   994→                        <SelectTrigger className="w-full">
+   995→   995→                          <SelectValue placeholder="选择折扣类型" />
+   996→   996→                        </SelectTrigger>
+   997→   997→                        <SelectContent>
+   998→   998→                          <SelectItem value="percentage">百分比折扣 (%)</SelectItem>
+   999→   999→                          <SelectItem value="fixed">固定金额 (元)</SelectItem>
+  1000→  1000→                        </SelectContent>
+  1001→  1001→                      </Select>
+  1002→  1002→                    </div>
+  1003→  1003→                    <div>
+  1004→  1004→                      <label className="text-xs font-medium text-gray-700 mb-1 block">
+  1005→  1005→                        折扣值 * {couponForm.discountType === 'percentage' ? '(%)' : '(元)'}
+  1006→  1006→                      </label>
+  1007→  1007→                      <Input
+  1008→  1008→                        type="number"
+  1009→  1009→                        min="1"
+  1010→  1010→                        max={couponForm.discountType === 'percentage' ? 100 : undefined}
+  1011→  1011→                        step={couponForm.discountType === 'percentage' ? '1' : '0.01'}
+  1012→  1012→                        value={couponForm.discountValue}
+  1013→  1013→                        onChange={(e) => setCouponForm(prev => ({ ...prev, discountValue: e.target.value }))}
+  1014→  1014→                        placeholder={couponForm.discountType === 'percentage' ? '如 30 表示 30%' : '如 10 表示 10 元'}
+  1015→  1015→                      />
+  1016→  1016→                    </div>
+  1017→  1017→                    <div>
+  1018→  1018→                      <label className="text-xs font-medium text-gray-700 mb-1 block">适用套餐</label>
+  1019→  1019→                      <Select
+  1020→  1020→                        value={couponForm.planId || 'all'}
+  1021→  1021→                        onValueChange={(v) => setCouponForm(prev => ({ ...prev, planId: v === 'all' ? '' : v }))}
+  1022→  1022→                      >
+  1023→  1023→                        <SelectTrigger className="w-full">
+  1024→  1024→                          <SelectValue placeholder="全部套餐" />
+  1025→  1025→                        </SelectTrigger>
+  1026→  1026→                        <SelectContent>
+  1027→  1027→                          <SelectItem value="all">全部套餐</SelectItem>
+  1028→  1028→                          <SelectItem value="pro">专业版 ¥49</SelectItem>
+  1029→  1029→                          <SelectItem value="premium">旗舰版 ¥99</SelectItem>
+  1030→  1030→                        </SelectContent>
+  1031→  1031→                      </Select>
+  1032→  1032→                    </div>
+  1033→  1033→                    <div>
+  1034→  1034→                      <label className="text-xs font-medium text-gray-700 mb-1 block">最大使用次数</label>
+  1035→  1035→                      <Input
+  1036→  1036→                        type="number"
+  1037→  1037→                        min="1"
+  1038→  1038→                        value={couponForm.maxUses}
+  1039→  1039→                        onChange={(e) => setCouponForm(prev => ({ ...prev, maxUses: e.target.value }))}
+  1040→  1040→                        placeholder="100"
+  1041→  1041→                      />
+  1042→  1042→                    </div>
+  1043→  1043→                    <div>
+  1044→  1044→                      <label className="text-xs font-medium text-gray-700 mb-1 block">过期时间</label>
+  1045→  1045→                      <Input
+  1046→  1046→                        type="date"
+  1047→  1047→                        value={couponForm.expiresAt}
+  1048→  1048→                        onChange={(e) => setCouponForm(prev => ({ ...prev, expiresAt: e.target.value }))}
+  1049→  1049→                      />
+  1050→  1050→                    </div>
+  1051→  1051→                  </div>
+  1052→  1052→                  {couponError && (
+  1053→  1053→                    <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{couponError}</div>
+  1054→  1054→                  )}
+  1055→  1055→                  <div className="flex items-center gap-2">
+  1056→  1056→                    <Button
+  1057→  1057→                      type="submit"
+  1058→  1058→                      disabled={couponSubmitting}
+  1059→  1059→                      className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white"
+  1060→  1060→                    >
+  1061→  1061→                      {couponSubmitting ? <Loader2 className="size-4 mr-1 animate-spin" /> : null}
+  1062→  1062→                      {couponSubmitting ? '创建中...' : '创建优惠券'}
+  1063→  1063→                    </Button>
+  1064→  1064→                    <Button
+  1065→  1065→                      type="button"
+  1066→  1066→                      variant="ghost"
+  1067→  1067→                      onClick={() => {
+  1068→  1068→                        setCouponFormOpen(false)
+  1069→  1069→                        setCouponError('')
+  1070→  1070→                      }}
+  1071→  1071→                    >
+  1072→  1072→                      取消
+  1073→  1073→                    </Button>
+  1074→  1074→                  </div>
+  1075→  1075→                </form>
+  1076→  1076→              )}
+  1077→  1077→
+  1078→  1078→              {/* 优惠券列表 */}
+  1079→  1079→              <div className="overflow-x-auto">
+  1080→  1080→                <table className="w-full text-sm">
+  1081→  1081→                  <thead className="bg-gray-50">
+  1082→  1082→                    <tr>
+  1083→  1083→                      <th className="text-left p-3 font-medium text-gray-600">优惠码</th>
+  1084→  1084→                      <th className="text-left p-3 font-medium text-gray-600">类型</th>
+  1085→  1085→                      <th className="text-right p-3 font-medium text-gray-600">折扣值</th>
+  1086→  1086→                      <th className="text-left p-3 font-medium text-gray-600">适用套餐</th>
+  1087→  1087→                      <th className="text-right p-3 font-medium text-gray-600">已用/上限</th>
+  1088→  1088→                      <th className="text-left p-3 font-medium text-gray-600">过期时间</th>
+  1089→  1089→                      <th className="text-left p-3 font-medium text-gray-600">状态</th>
+  1090→  1090→                      <th className="text-right p-3 font-medium text-gray-600">操作</th>
+  1091→  1091→                    </tr>
+  1092→  1092→                  </thead>
+  1093→  1093→                  <tbody>
+  1094→  1094→                    {coupons.map(c => {
+  1095→  1095→                      const usedUp = c.usedCount >= c.maxUses
+  1096→  1096→                      const expired = c.expiresAt ? new Date(c.expiresAt).getTime() < Date.now() : false
+  1097→  1097→                      const isLive = c.active && !usedUp && !expired
+  1098→  1098→                      return (
+  1099→  1099→                        <tr key={c.id} className="border-t border-gray-100 hover:bg-gray-50">
+  1100→  1100→                          <td className="p-3">
+  1101→  1101→                            <span className="font-mono font-semibold text-amber-700">{c.code}</span>
+  1102→  1102→                          </td>
+  1103→  1103→                          <td className="p-3">
+  1104→  1104→                            <Badge variant="outline">
+  1105→  1105→                              {c.discountType === 'percentage' ? '百分比' : '固定金额'}
+  1106→  1106→                            </Badge>
+  1107→  1107→                          </td>
+  1108→  1108→                          <td className="p-3 text-right font-medium">
+  1109→  1109→                            {c.discountType === 'percentage' ? `${c.discountValue}%` : `¥${(c.discountValue / 100).toFixed(2)}`}
+  1110→  1110→                          </td>
+  1111→  1111→                          <td className="p-3 text-gray-600">
+  1112→  1112→                            {!c.planId ? '全部套餐' : c.planId === 'pro' ? '专业版' : c.planId === 'premium' ? '旗舰版' : c.planId}
+  1113→  1113→                          </td>
+  1114→  1114→                          <td className="p-3 text-right text-gray-600">
+  1115→  1115→                            <span className={usedUp ? 'text-red-600 font-medium' : ''}>{c.usedCount}</span>
+  1116→  1116→                            <span className="text-gray-400"> / {c.maxUses}</span>
+  1117→  1117→                          </td>
+  1118→  1118→                          <td className="p-3 text-gray-500 text-xs">
+  1119→  1119→                            {c.expiresAt ? new Date(c.expiresAt).toLocaleDateString('zh-CN') : '永不过期'}
+  1120→  1120→                          </td>
+  1121→  1121→                          <td className="p-3">
+  1122→  1122→                            {expired ? (
+  1123→  1123→                              <Badge className="bg-gray-100 text-gray-500">已过期</Badge>
+  1124→  1124→                            ) : usedUp ? (
+  1125→  1125→                              <Badge className="bg-gray-100 text-gray-500">已用尽</Badge>
+  1126→  1126→                            ) : isLive ? (
+  1127→  1127→                              <Badge className="bg-green-100 text-green-700">启用中</Badge>
+  1128→  1128→                            ) : (
+  1129→  1129→                              <Badge className="bg-yellow-100 text-yellow-700">已停用</Badge>
+  1130→  1130→                            )}
+  1131→  1131→                          </td>
+  1132→  1132→                          <td className="p-3">
+  1133→  1133→                            <div className="flex items-center justify-end gap-1">
+  1134→  1134→                              <Button
+  1135→  1135→                                variant="ghost"
+  1136→  1136→                                size="sm"
+  1137→  1137→                                onClick={() => toggleCouponActive(c)}
+  1138→  1138→                                title={c.active ? '停用' : '启用'}
+  1139→  1139→                                className="h-8 px-2"
+  1140→  1140→                              >
+  1141→  1141→                                {c.active ? (
+  1142→  1142→                                  <PowerOff className="size-4 text-orange-600" />
+  1143→  1143→                                ) : (
+  1144→  1144→                                  <Power className="size-4 text-green-600" />
+  1145→  1145→                                )}
+  1146→  1146→                              </Button>
+  1147→  1147→                              <Button
+  1148→  1148→                                variant="ghost"
+  1149→  1149→                                size="sm"
+  1150→  1150→                                onClick={() => deleteCoupon(c)}
+  1151→  1151→                                title="删除"
+  1152→  1152→                                className="h-8 px-2 hover:bg-red-50"
+  1153→  1153→                              >
+  1154→  1154→                                <Trash2 className="size-4 text-red-600" />
+  1155→  1155→                              </Button>
+  1156→  1156→                            </div>
+  1157→  1157→                          </td>
+  1158→  1158→                        </tr>
+  1159→  1159→                      )
+  1160→  1160→                    })}
+  1161→  1161→                    {coupons.length === 0 && (
+  1162→  1162→                      <tr>
+  1163→  1163→                        <td colSpan={8} className="p-8 text-center text-gray-400">
+  1164→  1164→                          {couponsLoading ? '加载中...' : '暂无优惠券，点击右上角"创建优惠券"开始'}
+  1165→  1165→                        </td>
+  1166→  1166→                      </tr>
+  1167→  1167→                    )}
+  1168→  1168→                  </tbody>
+  1169→  1169→                </table>
+  1170→  1170→              </div>
+  1171→  1171→            </div>
+  1172→  1172→          </div>
+  1173→  1173→        )}
+  1174→  1174→
+  1175→  1175→        {/* Crisis Logs */}
+  1176→  1176→        {activeTab === 'crisis' && (
+  1177→  1177→          <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+  1178→  1178→            <div className="p-4 border-b border-gray-200 flex items-center justify-between">
+  1179→  1179→              <h3 className="font-bold text-gray-900">危机干预日志（共 {crisisLogs.length} 条）</h3>
+  1180→  1180→              <div className="flex items-center gap-2 text-sm text-gray-500">
+  1181→  1181→                <Phone className="size-4" />
+  1182→  1182→                <span>热线：400-161-9995</span>
+  1183→  1183→              </div>
+  1184→  1184→            </div>
+  1185→  1185→            <div className="divide-y divide-gray-100">
+  1186→  1186→              {crisisLogs.map(log => (
+  1187→  1187→                <div key={log.id} className="p-4 hover:bg-gray-50">
+  1188→  1188→                  <div className="flex items-start justify-between mb-2">
+  1189→  1189→                    <div className="flex items-center gap-2">
+  1190→  1190→                      <Badge className={
+  1191→  1191→                        log.riskLevel === 'severe' ? 'bg-red-100 text-red-700' :
+  1192→  1192→                        log.riskLevel === 'mild' ? 'bg-yellow-100 text-yellow-700' :
+  1193→  1193→                        'bg-gray-100 text-gray-700'
+  1194→  1194→                      }>
+  1195→  1195→                        {log.riskLevel === 'severe' ? '严重' : log.riskLevel === 'mild' ? '轻微' : '安全'}
+  1196→  1196→                      </Badge>
+  1197→  1197→                      {log.hotlineShown && <Badge variant="outline" className="text-xs">已展示热线</Badge>}
+  1198→  1198→                      <span className="text-xs text-gray-500">{new Date(log.createdAt).toLocaleString('zh-CN')}</span>
+  1199→  1199→                    </div>
+  1200→  1200→                    <Badge className={log.resolved ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}>
+  1201→  1201→                      {log.resolved ? '已处理' : '待处理'}
+  1202→  1202→                    </Badge>
+  1203→  1203→                  </div>
+  1204→  1204→                  <div className="text-sm text-gray-700 mb-2">
+  1205→  1205→                    <span className="font-medium">用户输入：</span>
+  1206→  1206→                    <span className="text-gray-600">"{log.userInput}"</span>
+  1207→  1207→                  </div>
+  1208→  1208→                  {log.triggerKeywords && (
+  1209→  1209→                    <div className="text-xs text-gray-500 mb-2">
+  1210→  1210→                      触发词：{log.triggerKeywords}
+  1211→  1211→                    </div>
+  1212→  1212→                  )}
+  1213→  1213→                  <div className="text-sm text-gray-600 bg-gray-50 rounded-lg p-2">
+  1214→  1214→                    {log.interventionResponse?.slice(0, 150)}...
+  1215→  1215→                  </div>
+  1216→  1216→                </div>
+  1217→  1217→              ))}
+  1218→  1218→              {crisisLogs.length === 0 && (
+  1219→  1219→                <div className="p-8 text-center text-gray-400">暂无危机干预记录</div>
+  1220→  1220→              )}
+  1221→  1221→            </div>
+  1222→  1222→          </div>
+  1223→  1223→        )}
+  1224→  1224→
+  1225→  1225→        {/* Settings - 系统设置 */}
+  1226→  1226→        {activeTab === 'settings' && (
+  1227→  1227→          <div className="space-y-6">
+  1228→  1228→            {/* 站点配置 */}
+  1229→  1229→            <div className="bg-white rounded-xl border border-gray-200 p-6">
+  1230→  1230→              <div className="flex items-center gap-2 mb-5">
+  1231→  1231→                <div className="w-9 h-9 rounded-lg bg-amber-50 flex items-center justify-center">
+  1232→  1232→                  <Megaphone className="size-5 text-amber-600" />
+  1233→  1233→                </div>
+  1234→  1234→                <div>
+  1235→  1235→                  <h3 className="font-bold text-gray-900">站点配置</h3>
+  1236→  1236→                  <p className="text-xs text-gray-500">站点名称、公告、Banner、联系邮箱</p>
+  1237→  1237→                </div>
+  1238→  1238→              </div>
+  1239→  1239→
+  1240→  1240→              <div className="grid md:grid-cols-2 gap-4">
+  1241→  1241→                <div>
+  1242→  1242→                  <label className="text-sm font-medium text-gray-700 mb-1 block">站点名称</label>
+  1243→  1243→                  <Input
+  1244→  1244→                    value={configForm.siteName}
+  1245→  1245→                    onChange={(e) => setConfigForm({ ...configForm, siteName: e.target.value })}
+  1246→  1246→                    placeholder="Mindway.Life"
+  1247→  1247→                    className="h-10"
+  1248→  1248→                  />
+  1249→  1249→                </div>
+  1250→  1250→                <div>
+  1251→  1251→                  <label className="text-sm font-medium text-gray-700 mb-1 block">联系邮箱</label>
+  1252→  1252→                  <Input
+  1253→  1253→                    type="email"
+  1254→  1254→                    value={configForm.contactEmail}
+  1255→  1255→                    onChange={(e) => setConfigForm({ ...configForm, contactEmail: e.target.value })}
+  1256→  1256→                    placeholder="piaoshu@mindway.life"
+  1257→  1257→                    className="h-10"
+  1258→  1258→                  />
+  1259→  1259→                </div>
+  1260→  1260→                <div className="md:col-span-2">
+  1261→  1261→                  <label className="text-sm font-medium text-gray-700 mb-1 block">公告内容</label>
+  1262→  1262→                  <Textarea
+  1263→  1263→                    value={configForm.announcement}
+  1264→  1264→                    onChange={(e) => setConfigForm({ ...configForm, announcement: e.target.value })}
+  1265→  1265→                    placeholder="站点公告，如：新功能上线、活动通知等"
+  1266→  1266→                    rows={3}
+  1267→  1267→                  />
+  1268→  1268→                </div>
+  1269→  1269→                <div className="md:col-span-2">
+  1270→  1270→                  <label className="text-sm font-medium text-gray-700 mb-1 block">Banner 文字</label>
+  1271→  1271→                  <Input
+  1272→  1272→                    value={configForm.bannerText}
+  1273→  1273→                    onChange={(e) => setConfigForm({ ...configForm, bannerText: e.target.value })}
+  1274→  1274→                    placeholder="顶部横幅文字，如：限时优惠 / 新哲学家入驻"
+  1275→  1275→                    className="h-10"
+  1276→  1276→                  />
+  1277→  1277→                </div>
+  1278→  1278→                <div className="md:col-span-2 flex items-center justify-between p-3 bg-gray-50 rounded-lg">
+  1279→  1279→                  <div>
+  1280→  1280→                    <p className="text-sm font-medium text-gray-700">启用 Banner</p>
+  1281→  1281→                    <p className="text-xs text-gray-500">开启后首页顶部展示 Banner 横幅</p>
+  1282→  1282→                  </div>
+  1283→  1283→                  <Switch
+  1284→  1284→                    checked={configForm.bannerEnabled}
+  1285→  1285→                    onCheckedChange={(v) => setConfigForm({ ...configForm, bannerEnabled: v })}
+  1286→  1286→                  />
+  1287→  1287→                </div>
+  1288→  1288→              </div>
+  1289→  1289→            </div>
+  1290→  1290→
+  1291→  1291→            {/* LLM 配置 */}
+  1292→  1292→            <div className="bg-white rounded-xl border border-gray-200 p-6">
+  1293→  1293→              <div className="flex items-center gap-2 mb-5">
+  1294→  1294→                <div className="w-9 h-9 rounded-lg bg-purple-50 flex items-center justify-center">
+  1295→  1295→                  <KeyRound className="size-5 text-purple-600" />
+  1296→  1296→                </div>
+  1297→  1297→                <div>
+  1298→  1298→                  <h3 className="font-bold text-gray-900">LLM 提供商配置</h3>
+  1299→  1299→                  <p className="text-xs text-gray-500">选择默认 LLM 提供商并填写对应 API Key</p>
+  1300→  1300→                </div>
+  1301→  1301→              </div>
+  1302→  1302→
+  1303→  1303→              <div className="space-y-4">
+  1304→  1304→                <div>
+  1305→  1305→                  <label className="text-sm font-medium text-gray-700 mb-1 block">LLM 提供商</label>
+  1306→  1306→                  <select
+  1307→  1307→                    value={configForm.llmProvider}
+  1308→  1308→                    onChange={(e) =>
+  1309→  1309→                      setConfigForm({
+  1310→  1310→                        ...configForm,
+  1311→  1311→                        llmProvider: e.target.value as 'zhipu' | 'deepseek' | 'zai',
+  1312→  1312→                      })
+  1313→  1313→                    }
+  1314→  1314→                    className="w-full h-10 rounded-md border border-gray-200 bg-white px-3 text-sm focus:outline-none focus:ring-2 focus:ring-amber-500/30 focus:border-amber-500"
+  1315→  1315→                  >
+  1316→  1316→                    <option value="zhipu">智谱 GLM-4-Flash（免费，推荐）</option>
+  1317→  1317→                    <option value="deepseek">DeepSeek（便宜高质量）</option>
+  1318→  1318→                    <option value="zai">ZAI SDK（沙箱隧道，兜底）</option>
+  1319→  1319→                  </select>
+  1320→  1320→                </div>
+  1321→  1321→
+  1322→  1322→                <div>
+  1323→  1323→                  <label className="text-sm font-medium text-gray-700 mb-1 block flex items-center gap-2">
+  1324→  1324→                    智谱 API Key
+  1325→  1325→                    {siteConfig?.zhipuApiKeySet && (
+  1326→  1326→                      <Badge className="bg-green-100 text-green-700 text-xs">已配置</Badge>
+  1327→  1327→                    )}
+  1328→  1328→                  </label>
+  1329→  1329→                  <Input
+  1330→  1330→                    type="password"
+  1331→  1331→                    value={configForm.zhipuApiKey}
+  1332→  1332→                    onChange={(e) => setConfigForm({ ...configForm, zhipuApiKey: e.target.value })}
+  1333→  1333→                    placeholder={siteConfig?.zhipuApiKeySet ? '已保存，留空表示不修改' : '请输入智谱 API Key'}
+  1334→  1334→                    className="h-10 font-mono"
+  1335→  1335→                    autoComplete="off"
+  1336→  1336→                  />
+  1337→  1337→                  <p className="text-xs text-gray-400 mt-1">
+  1338→  1338→                    申请地址：open.bigmodel.cn · 留空保存则保留原值
+  1339→  1339→                  </p>
+  1340→  1340→                </div>
+  1341→  1341→
+  1342→  1342→                <div>
+  1343→  1343→                  <label className="text-sm font-medium text-gray-700 mb-1 block flex items-center gap-2">
+  1344→  1344→                    DeepSeek API Key
+  1345→  1345→                    {siteConfig?.deepseekApiKeySet && (
+  1346→  1346→                      <Badge className="bg-green-100 text-green-700 text-xs">已配置</Badge>
+  1347→  1347→                    )}
+  1348→  1348→                  </label>
+  1349→  1349→                  <Input
+  1350→  1350→                    type="password"
+  1351→  1351→                    value={configForm.deepseekApiKey}
+  1352→  1352→                    onChange={(e) => setConfigForm({ ...configForm, deepseekApiKey: e.target.value })}
+  1353→  1353→                    placeholder={siteConfig?.deepseekApiKeySet ? '已保存，留空表示不修改' : '请输入 DeepSeek API Key'}
+  1354→  1354→                    className="h-10 font-mono"
+  1355→  1355→                    autoComplete="off"
+  1356→  1356→                  />
+  1357→  1357→                  <p className="text-xs text-gray-400 mt-1">
+  1358→  1358→                    申请地址：platform.deepseek.com · 留空保存则保留原值
+  1359→  1359→                  </p>
+  1360→  1360→                </div>
+  1361→  1361→              </div>
+  1362→  1362→            </div>
+  1363→  1363→
+  1364→  1364→            {/* 保存按钮 */}
+  1365→  1365→            <div className="bg-white rounded-xl border border-gray-200 p-4 flex items-center justify-between">
+  1366→  1366→              <div className="flex items-center gap-2">
+  1367→  1367→                {configSaved && (
+  1368→  1368→                  <div className="flex items-center gap-1.5 text-sm text-green-700 bg-green-50 px-3 py-1.5 rounded-lg">
+  1369→  1369→                    <CheckCircle2 className="size-4" />
+  1370→  1370→                    <span>保存成功</span>
+  1371→  1371→                  </div>
+  1372→  1372→                )}
+  1373→  1373→                {configError && (
+  1374→  1374→                  <div className="text-sm text-red-700 bg-red-50 px-3 py-1.5 rounded-lg">{configError}</div>
+  1375→  1375→                )}
+  1376→  1376→                {siteConfig?.updatedAt && !configSaved && !configError && (
+  1377→  1377→                  <span className="text-xs text-gray-400">
+  1378→  1378→                    上次更新：{new Date(siteConfig.updatedAt).toLocaleString('zh-CN')}
+  1379→  1379→                  </span>
+  1380→  1380→                )}
+  1381→  1381→              </div>
+  1382→  1382→              <Button
+  1383→  1383→                onClick={saveSiteConfig}
+  1384→  1384→                disabled={configSaving}
+  1385→  1385→                className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white"
+  1386→  1386→              >
+  1387→  1387→                {configSaving ? (
+  1388→  1388→                  <>
+  1389→  1389→                    <Loader2 className="size-4 mr-1.5 animate-spin" /> 保存中...
+  1390→  1390→                  </>
+  1391→  1391→                ) : (
+  1392→  1392→                  <>
+  1393→  1393→                    <Save className="size-4 mr-1.5" /> 保存配置
+  1394→  1394→                  </>
+  1395→  1395→                )}
+  1396→  1396→              </Button>
+  1397→  1397→            </div>
+  1398→  1398→          </div>
+  1399→  1399→        )}
+  1400→  1400→
+  1401→  1401→        {/* Analytics - 数据分析 */}
+  1402→  1402→        {activeTab === 'analytics' && (
+  1403→  1403→          <div className="space-y-6">
+  1404→  1404→            {analyticsLoading && !analytics && (
+  1405→  1405→              <div className="bg-white rounded-xl border border-gray-200 p-12 flex items-center justify-center">
+  1406→  1406→                <Loader2 className="size-6 animate-spin text-gray-400" />
+  1407→  1407→                <span className="ml-2 text-gray-500">加载分析数据中...</span>
+  1408→  1408→              </div>
+  1409→  1409→            )}
+  1410→  1410→
+  1411→  1411→            {analytics && (
+  1412→  1412→              <>
+  1413→  1413→                {/* 30天对话趋势 */}
+  1414→  1414→                <div className="bg-white rounded-xl border border-gray-200 p-6">
+  1415→  1415→                  <div className="flex items-center justify-between mb-4">
+  1416→  1416→                    <div className="flex items-center gap-2">
+  1417→  1417→                      <div className="w-9 h-9 rounded-lg bg-blue-50 flex items-center justify-center">
+  1418→  1418→                        <TrendingUp className="size-5 text-blue-600" />
+  1419→  1419→                      </div>
+  1420→  1420→                      <div>
+  1421→  1421→                        <h3 className="font-bold text-gray-900">最近 30 天对话趋势</h3>
+  1422→  1422→                        <p className="text-xs text-gray-500">每日新建对话数</p>
+  1423→  1423→                      </div>
+  1424→  1424→                    </div>
+  1425→  1425→                    <div className="text-right">
+  1426→  1426→                      <p className="text-xs text-gray-500">30天合计</p>
+  1427→  1427→                      <p className="text-xl font-bold text-gray-900">
+  1428→  1428→                        {analytics.dailyConversationTrend.reduce((s, d) => s + d.count, 0)}
+  1429→  1429→                      </p>
+  1430→  1430→                    </div>
+  1431→  1431→                  </div>
+  1432→  1432→                  <div className="flex items-end gap-0.5 h-32 mb-2">
+  1433→  1433→                    {analytics.dailyConversationTrend.map((d) => {
+  1434→  1434→                      const max = Math.max(...analytics.dailyConversationTrend.map((x) => x.count), 1)
+  1435→  1435→                      const h = (d.count / max) * 100
+  1436→  1436→                      return (
+  1437→  1437→                        <div
+  1438→  1438→                          key={d.date}
+  1439→  1439→                          className="flex-1 bg-gradient-to-t from-amber-500 to-amber-300 rounded-t-sm hover:from-amber-600 hover:to-amber-400 transition-colors relative group"
+  1440→  1440→                          style={{ height: `${Math.max(h, 2)}%` }}
+  1441→  1441→                          title={`${d.date}: ${d.count} 场对话`}
+  1442→  1442→                        />
+  1443→  1443→                      )
+  1444→  1444→                    })}
+  1445→  1445→                  </div>
+  1446→  1446→                  <div className="flex justify-between text-xs text-gray-400">
+  1447→  1447→                    <span>{analytics.dailyConversationTrend[0]?.date}</span>
+  1448→  1448→                    <span>{analytics.dailyConversationTrend[analytics.dailyConversationTrend.length - 1]?.date}</span>
+  1449→  1449→                  </div>
+  1450→  1450→                </div>
+  1451→  1451→
+  1452→  1452→                {/* 转化漏斗 + 留存 */}
+  1453→  1453→                <div className="grid md:grid-cols-2 gap-6">
+  1454→  1454→                  {/* 转化漏斗 */}
+  1455→  1455→                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+  1456→  1456→                    <h3 className="font-bold text-gray-900 mb-4">转化漏斗</h3>
+  1457→  1457→                    <div className="space-y-3">
+  1458→  1458→                      <FunnelBar
+  1459→  1459→                        label="注册用户"
+  1460→  1460→                        value={analytics.funnel.registered}
+  1461→  1461→                        rate={100}
+  1462→  1462→                        color="bg-blue-500"
+  1463→  1463→                      />
+  1464→  1464→                      <FunnelBar
+  1465→  1465→                        label="有过对话"
+  1466→  1466→                        value={analytics.funnel.conversed}
+  1467→  1467→                        rate={analytics.funnel.convRateRegToConv}
+  1468→  1468→                        color="bg-amber-500"
+  1469→  1469→                      />
+  1470→  1470→                      <FunnelBar
+  1471→  1471→                        label="已订阅"
+  1472→  1472→                        value={analytics.funnel.subscribed}
+  1473→  1473→                        rate={analytics.funnel.convRateOverall}
+  1474→  1474→                        color="bg-emerald-600"
+  1475→  1475→                      />
+  1476→  1476→                    </div>
+  1477→  1477→                    <div className="mt-4 pt-4 border-t border-gray-100 grid grid-cols-2 gap-3 text-sm">
+  1478→  1478→                      <div>
+  1479→  1479→                        <p className="text-xs text-gray-500">注册 → 对话</p>
+  1480→  1480→                        <p className="font-bold text-gray-900">{analytics.funnel.convRateRegToConv}%</p>
+  1481→  1481→                      </div>
+  1482→  1482→                      <div>
+  1483→  1483→                        <p className="text-xs text-gray-500">对话 → 订阅</p>
+  1484→  1484→                        <p className="font-bold text-gray-900">{analytics.funnel.convRateConvToSub}%</p>
+  1485→  1485→                      </div>
+  1486→  1486→                    </div>
+  1487→  1487→                  </div>
+  1488→  1488→
+  1489→  1489→                  {/* 用户留存 */}
+  1490→  1490→                  <div className="bg-white rounded-xl border border-gray-200 p-6">
+  1491→  1491→                    <h3 className="font-bold text-gray-900 mb-4">用户留存率</h3>
+  1492→  1492→                    <p className="text-xs text-gray-500 mb-4">基于过去 30 天注册用户，按首次对话时间计算</p>
+  1493→  1493→                    <div className="grid grid-cols-3 gap-3">
+  1494→  1494→                      <RetentionCard label="次日留存" data={analytics.retention.d1} color="text-blue-600" />
+  1495→  1495→                      <RetentionCard label="7日留存" data={analytics.retention.d7} color="text-amber-600" />
+  1496→  1496→                      <RetentionCard label="30日留存" data={analytics.retention.d30} color="text-emerald-600" />
+  1497→  1497→                    </div>
+  1498→  1498→                  </div>
+  1499→  1499→                </div>
+  1500→  1500→
+  1501→  1501→                {/* API 成本 */}
+  1502→  1502→                <div className="bg-white rounded-xl border border-gray-200 p-6">
+  1503→  1503→                  <div className="flex items-center justify-between mb-4">
+  1504→  1504→                    <h3 className="font-bold text-gray-900">API 调用成本估算</h3>
+  1505→  1505→                    <Badge variant="outline" className="text-xs">
+  1506→  1506→                      单价 ¥{analytics.apiCost.costPerMessage.toFixed(3)}/条
+  1507→  1507→                    </Badge>
+  1508→  1508→                  </div>
+  1509→  1509→                  <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
+  1510→  1510→                    <div className="p-3 bg-gray-50 rounded-lg">
+  1511→  1511→                      <p className="text-xs text-gray-500">总消息数</p>
+  1512→  1512→                      <p className="text-xl font-bold text-gray-900">{analytics.apiCost.totalMessages.toLocaleString()}</p>
+  1513→  1513→                    </div>
+  1514→  1514→                    <div className="p-3 bg-gray-50 rounded-lg">
+  1515→  1515→                      <p className="text-xs text-gray-500">用户消息</p>
+  1516→  1516→                      <p className="text-xl font-bold text-gray-900">{analytics.apiCost.userMessages.toLocaleString()}</p>
+  1517→  1517→                    </div>
+  1518→  1518→                    <div className="p-3 bg-gray-50 rounded-lg">
+  1519→  1519→                      <p className="text-xs text-gray-500">AI 回复</p>
+  1520→  1520→                      <p className="text-xl font-bold text-gray-900">{analytics.apiCost.assistantMessages.toLocaleString()}</p>
+  1521→  1521→                    </div>
+  1522→  1522→                    <div className="p-3 bg-amber-50 rounded-lg">
+  1523→  1523→                      <p className="text-xs text-amber-700">估算总成本</p>
+  1524→  1524→                      <p className="text-xl font-bold text-amber-700">¥{analytics.apiCost.estimatedCostCny.toFixed(2)}</p>
+  1525→  1525→                    </div>
+  1526→  1526→                  </div>
+  1527→  1527→                </div>
+  1528→  1528→
+  1529→  1529→                {/* 哲学家热度 Top 20 */}
+  1530→  1530→                <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+  1531→  1531→                  <div className="p-4 border-b border-gray-200">
+  1532→  1532→                    <h3 className="font-bold text-gray-900">哲学家热度 Top 20（按对话数）</h3>
+  1533→  1533→                  </div>
+  1534→  1534→                  {analytics.topPhilosophers.length === 0 ? (
+  1535→  1535→                    <div className="p-8 text-center text-gray-400">暂无对话数据</div>
+  1536→  1536→                  ) : (
+  1537→  1537→                    <div className="divide-y divide-gray-100">
+  1538→  1538→                      {analytics.topPhilosophers.map((p) => {
+  1539→  1539→                        const maxCount = analytics.topPhilosophers[0]?.conversationCount || 1
+  1540→  1540→                        const pct = (p.conversationCount / maxCount) * 100
+  1541→  1541→                        return (
+  1542→  1542→                          <div key={p.philosopherId} className="p-3 flex items-center gap-3 hover:bg-gray-50">
+  1543→  1543→                            <div className={`w-7 text-center font-bold text-sm ${p.rank <= 3 ? 'text-amber-600' : 'text-gray-400'}`}>
+  1544→  1544→                              #{p.rank}
+  1545→  1545→                            </div>
+  1546→  1546→                            {p.avatarUrl ? (
+  1547→  1547→                              <img src={p.avatarUrl} alt="" className="size-8 rounded-full" />
+  1548→  1548→                            ) : (
+  1549→  1549→                              <div className="size-8 rounded-full bg-gray-200" />
+  1550→  1550→                            )}
+  1551→  1551→                            <div className="flex-1 min-w-0">
+  1552→  1552→                              <div className="flex items-center gap-2">
+  1553→  1553→                                <p className="text-sm font-medium text-gray-900 truncate">{p.name}</p>
+  1554→  1554→                                {p.era && <Badge variant="outline" className="text-xs">{p.era}</Badge>}
+  1555→  1555→                              </div>
+  1556→  1556→                              <div className="mt-1 h-1.5 bg-gray-100 rounded-full overflow-hidden w-full max-w-xs">
+  1557→  1557→                                <div className="h-full bg-gradient-to-r from-amber-500 to-amber-400" style={{ width: `${pct}%` }} />
+  1558→  1558→                              </div>
+  1559→  1559→                            </div>
+  1560→  1560→                            <div className="text-right">
+  1561→  1561→                              <p className="text-sm font-bold text-gray-900">{p.conversationCount}</p>
+  1562→  1562→                              <p className="text-xs text-gray-400">场对话</p>
+  1563→  1563→                            </div>
+  1564→  1564→                          </div>
+  1565→  1565→                        )
+  1566→  1566→                      })}
+  1567→  1567→                    </div>
+  1568→  1568→                  )}
+  1569→  1569→                </div>
+  1570→  1570→
+  1571→  1571→                <div className="text-right text-xs text-gray-400">
+  1572→  1572→                  数据生成于：{new Date(analytics.generatedAt).toLocaleString('zh-CN')}
+  1573→  1573→                </div>
+  1574→  1574→              </>
+  1575→  1575→            )}
+  1576→  1576→          </div>
+  1577→  1577→        )}
+  1578→  1578→
+  1579→  1579→        {/* Philosophers - 哲学家管理 */}
+  1580→  1580→        {activeTab === 'philosophers' && (
+  1581→  1581→          <div className="space-y-4">
+  1582→  1582→            <div className="bg-white rounded-xl border border-gray-200 overflow-hidden">
+  1583→  1583→              {/* 头部 + 新增按钮 */}
+  1584→  1584→              <div className="p-4 border-b border-gray-200 flex flex-wrap items-center justify-between gap-3">
+  1585→  1585→                <h3 className="font-bold text-gray-900 flex items-center gap-2">
+  1586→  1586→                  <BookOpen className="size-5 text-amber-600" />
+  1587→  1587→                  哲学家管理（共 {philosophersPagination.total} 位）
+  1588→  1588→                </h3>
+  1589→  1589→                <Button
+  1590→  1590→                  size="sm"
+  1591→  1591→                  onClick={openCreatePhilosopher}
+  1592→  1592→                  className="bg-gradient-to-r from-amber-600 to-amber-700 hover:from-amber-700 hover:to-amber-800 text-white"
+  1593→  1593→                >
+  1594→  1594→                  <Plus className="size-4 mr-1" /> 新增哲学家
+  1595→  1595→                </Button>
+  1596→  1596→              </div>
+  1597→  1597→              {/* 搜索 + 筛选 */}
+  1598→  1598→              <div className="p-4 border-b border-gray-200 flex flex-wrap items-center gap-3">
+  1599→  1599→                <div className="relative">
+  1600→  1600→                  <Input
+  1601→  1601→                    type="text"
+  1602→  1602→                    placeholder="搜索中文名 / 英文名 / slug / 标语..."
+  1603→  1603→                    value={philosopherSearch}
+  1604→  1604→                    onChange={(e) => {
+  1605→  1605→                      setPhilosopherSearch(e.target.value)
+  1606→  1606→                      setPhilosophersPagination(p => ({ ...p, page: 1 }))
+  1607→  1607→                    }}
+  1608→  1608→                    className="max-w-xs pr-8"
+  1609→  1609→                  />
+  1610→  1610→                  {philosopherSearch && (
+  1611→  1611→                    <button
+  1612→  1612→                      onClick={() => {
+  1613→  1613→                        setPhilosopherSearch('')
+  1614→  1614→                        setPhilosophersPagination(p => ({ ...p, page: 1 }))
+  1615→  1615→                      }}
+  1616→  1616→                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+  1617→  1617→                      aria-label="清空"
+  1618→  1618→                    >
+  1619→  1619→                      ×
+  1620→  1620→                    </button>
+  1621→  1621→                  )}
+  1622→  1622→                </div>
+  1623→  1623→                <Select
+  1624→  1624→                  value={philosopherEra}
+  1625→  1625→                  onValueChange={(v) => {
+  1626→  1626→                    setPhilosopherEra(v)
+  1627→  1627→                    setPhilosophersPagination(p => ({ ...p, page: 1 }))
+  1628→  1628→                  }}
+  1629→  1629→                >
+  1630→  1630→                  <SelectTrigger className="w-32">
+  1631→  1631→                    <SelectValue placeholder="时代" />
+  1632→  1632→                  </SelectTrigger>
+  1633→  1633→                  <SelectContent>
+  1634→  1634→                    <SelectItem value="all">全部时代</SelectItem>
+  1635→  1635→                    <SelectItem value="古典">古典</SelectItem>
+  1636→  1636→                    <SelectItem value="近代">近代</SelectItem>
+  1637→  1637→                    <SelectItem value="当代">当代</SelectItem>
+  1638→  1638→                    <SelectItem value="主理人">主理人</SelectItem>
+  1639→  1639→                  </SelectContent>
+  1640→  1640→                </Select>
+  1641→  1641→                <Select
+  1642→  1642→                  value={philosopherCategory}
+  1643→  1643→                  onValueChange={(v) => {
+  1644→  1644→                    setPhilosopherCategory(v)
+  1645→  1645→                    setPhilosophersPagination(p => ({ ...p, page: 1 }))
+  1646→  1646→                  }}
+  1647→  1647→                >
+  1648→  1648→                  <SelectTrigger className="w-32">
+  1649→  1649→                    <SelectValue placeholder="分类" />
+  1650→  1650→                  </SelectTrigger>
+  1651→  1651→                  <SelectContent>
+  1652→  1652→                    <SelectItem value="all">全部分类</SelectItem>
+  1653→  1653→                    <SelectItem value="情绪类">情绪类</SelectItem>
+  1654→  1654→                    <SelectItem value="关系类">关系类</SelectItem>
+  1655→  1655→                    <SelectItem value="选择类">选择类</SelectItem>
+  1656→  1656→                    <SelectItem value="意义类">意义类</SelectItem>
+  1657→  1657→                    <SelectItem value="综合类">综合类</SelectItem>
+  1658→  1658→                  </SelectContent>
+  1659→  1659→                </Select>
+  1660→  1660→                {philosophersLoading && <Loader2 className="size-4 animate-spin text-gray-400" />}
+  1661→  1661→                <div className="ml-auto text-xs text-gray-400">
+  1662→  1662→                  第 {philosophersPagination.page} / {philosophersPagination.totalPages} 页
+  1663→  1663→                </div>
+  1664→  1664→              </div>
+  1665→  1665→              {/* 列表表格 */}
+  1666→  1666→              <div className="overflow-x-auto">
+  1667→  1667→                <table className="w-full text-sm">
+  1668→  1668→                  <thead className="bg-gray-50">
+  1669→  1669→                    <tr>
+  1670→  1670→                      <th className="text-left p-3 font-medium text-gray-600">头像</th>
+  1671→  1671→                      <th className="text-left p-3 font-medium text-gray-600">中文名</th>
+  1672→  1672→                      <th className="text-left p-3 font-medium text-gray-600">英文名</th>
+  1673→  1673→                      <th className="text-left p-3 font-medium text-gray-600">slug</th>
+  1674→  1674→                      <th className="text-left p-3 font-medium text-gray-600">时代</th>
+  1675→  1675→                      <th className="text-left p-3 font-medium text-gray-600">分类</th>
+  1676→  1676→                      <th className="text-right p-3 font-medium text-gray-600">排序</th>
+  1677→  1677→                      <th className="text-center p-3 font-medium text-gray-600">身份</th>
+  1678→  1678→                      <th className="text-center p-3 font-medium text-gray-600">状态</th>
+  1679→  1679→                      <th className="text-right p-3 font-medium text-gray-600">对话数</th>
+  1680→  1680→                      <th className="text-right p-3 font-medium text-gray-600">操作</th>
+  1681→  1681→                    </tr>
+  1682→  1682→                  </thead>
+  1683→  1683→                  <tbody>
+  1684→  1684→                    {philosophers.map(p => (
+  1685→  1685→                      <tr key={p.id} className="border-t border-gray-100 hover:bg-gray-50">
+  1686→  1686→                        <td className="p-3">
+  1687→  1687→                          {p.avatarUrl
+  1688→  1688→                            ? <img src={p.avatarUrl} alt="" className="size-9 rounded-full object-cover bg-gray-100" />
+  1689→  1689→                            : <div className="size-9 rounded-full bg-gray-100 flex items-center justify-center text-xs text-gray-400">{p.nameCn?.[0] || '?'}</div>}
+  1690→  1690→                        </td>
+  1691→  1691→                        <td className="p-3 font-medium text-gray-900 align-top">
+  1692→  1692→                          <div>{p.nameCn}</div>
+  1693→  1693→                          {p.tagline && (
+  1694→  1694→                            <div className="text-xs text-gray-400 font-normal mt-0.5 line-clamp-1 max-w-xs">{p.tagline}</div>
+  1695→  1695→                          )}
+  1696→  1696→                        </td>
+  1697→  1697→                        <td className="p-3 text-gray-600">{p.nameEn}</td>
+  1698→  1698→                        <td className="p-3 text-gray-500 text-xs font-mono">{p.slug}</td>
+  1699→  1699→                        <td className="p-3"><Badge variant="outline">{p.era}</Badge></td>
+  1700→  1700→                        <td className="p-3"><Badge variant="outline">{p.category}</Badge></td>
+  1701→  1701→                        <td className="p-3 text-right text-gray-600">{p.order}</td>
+  1702→  1702→                        <td className="p-3 text-center">
+  1703→  1703→                          {p.isHost
+  1704→  1704→                            ? <Badge className="bg-amber-100 text-amber-700">主理人</Badge>
+  1705→  1705→                            : <span className="text-gray-300">—</span>}
+  1706→  1706→                        </td>
+  1707→  1707→                        <td className="p-3 text-center">
+  1708→  1708→                          {p.published
+  1709→  1709→                            ? <Badge className="bg-green-100 text-green-700">已发布</Badge>
+  1710→  1710→                            : <Badge className="bg-gray-100 text-gray-600">草稿</Badge>}
+  1711→  1711→                        </td>
+  1712→  1712→                        <td className="p-3 text-right text-gray-600">{p._count?.conversations ?? 0}</td>
+  1713→  1713→                        <td className="p-3 text-right">
+  1714→  1714→                          <div className="flex items-center justify-end gap-1">
+  1715→  1715→                            <Button size="sm" variant="ghost" onClick={() => openEditPhilosopher(p)}>
+  1716→  1716→                              <Pencil className="size-3.5 mr-1" /> 编辑
+  1717→  1717→                            </Button>
+  1718→  1718→                            <Button
+  1719→  1719→                              size="sm"
+  1720→  1720→                              variant="ghost"
+  1721→  1721→                              className="text-red-600 hover:text-red-700"
+  1722→  1722→                              onClick={() => {
+  1723→  1723→                                setPhilosopherError('')
+  1724→  1724→                                setDeletingPhilosopher(p)
+  1725→  1725→                              }}
+  1726→  1726→                            >
+  1727→  1727→                              <Trash2 className="size-3.5 mr-1" /> 删除
+  1728→  1728→                            </Button>
+  1729→  1729→                          </div>
+  1730→  1730→                        </td>
+  1731→  1731→                      </tr>
+  1732→  1732→                    ))}
+  1733→  1733→                    {philosophers.length === 0 && !philosophersLoading && (
+  1734→  1734→                      <tr>
+  1735→  1735→                        <td colSpan={11} className="p-8 text-center text-gray-400">
+  1736→  1736→                          暂无哲学家，点击右上角「新增哲学家」开始创建
+  1737→  1737→                        </td>
+  1738→  1738→                      </tr>
+  1739→  1739→                    )}
+  1740→  1740→                  </tbody>
+  1741→  1741→                </table>
+  1742→  1742→              </div>
+  1743→  1743→              {/* 分页 */}
+  1744→  1744→              {philosophersPagination.totalPages > 1 && (
+  1745→  1745→                <div className="p-3 border-t border-gray-200 flex items-center justify-between text-sm text-gray-600">
+  1746→  1746→                  <span>
+  1747→  1747→                    共 {philosophersPagination.total} 条 · 第 {philosophersPagination.page} / {philosophersPagination.totalPages} 页
+  1748→  1748→                  </span>
+  1749→  1749→                  <div className="flex items-center gap-2">
+  1750→  1750→                    <Button
+  1751→  1751→                      size="sm"
+  1752→  1752→                      variant="outline"
+  1753→  1753→                      disabled={philosophersPagination.page <= 1 || philosophersLoading}
+  1754→  1754→                      onClick={() => setPhilosophersPagination(p => ({ ...p, page: p.page - 1 }))}
+  1755→  1755→                    >
+  1756→  1756→                      上一页
+  1757→  1757→                    </Button>
+  1758→  1758→                    <Button
+  1759→  1759→                      size="sm"
+  1760→  1760→                      variant="outline"
+  1761→  1761→                      disabled={philosophersPagination.page >= philosophersPagination.totalPages || philosophersLoading}
+  1762→  1762→                      onClick={() => setPhilosophersPagination(p => ({ ...p, page: p.page + 1 }))}
+  1763→  1763→                    >
+  1764→  1764→                      下一页
+  1765→  1765→                    </Button>
+  1766→  1766→                  </div>
+  1767→  1767→                </div>
+  1768→  1768→              )}
+  1769→  1769→            </div>
+  1770→  1770→          </div>
+  1771→  1771→        )}
+  1772→  1772→
+  1773→  1773→        {/* 哲学家编辑/新增弹窗 */}
+  1774→  1774→        <Dialog open={!!editingPhilosopher} onOpenChange={(o) => !o && setEditingPhilosopher(null)}>
+  1775→  1775→          <DialogContent className="sm:max-w-3xl max-h-[90vh] overflow-y-auto">
+  1776→  1776→            <DialogHeader>
+  1777→  1777→              <DialogTitle>{editingPhilosopher?.id ? '编辑哲学家' : '新增哲学家'}</DialogTitle>
+  1778→  1778→              <DialogDescription>修改哲学家信息后点击保存。带 * 为必填字段。</DialogDescription>
+  1779→  1779→            </DialogHeader>
+  1780→  1780→            {philosopherError && (
+  1781→  1781→              <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{philosopherError}</div>
+  1782→  1782→            )}
+  1783→  1783→            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+  1784→  1784→              <Field label="中文名 *">
+  1785→  1785→                <Input
+  1786→  1786→                  value={editingPhilosopher?.nameCn || ''}
+  1787→  1787→                  onChange={(e) => updateEditingField('nameCn', e.target.value)}
+  1788→  1788→                  placeholder="如：勒内·笛卡尔"
+  1789→  1789→                />
+  1790→  1790→              </Field>
+  1791→  1791→              <Field label="英文名 *">
+  1792→  1792→                <Input
+  1793→  1793→                  value={editingPhilosopher?.nameEn || ''}
+  1794→  1794→                  onChange={(e) => updateEditingField('nameEn', e.target.value)}
+  1795→  1795→                  placeholder="如：René Descartes"
+  1796→  1796→                />
+  1797→  1797→              </Field>
+  1798→  1798→              <Field label="Slug * (URL 标识，唯一)">
+  1799→  1799→                <Input
+  1800→  1800→                  value={editingPhilosopher?.slug || ''}
+  1801→  1801→                  onChange={(e) => updateEditingField('slug', e.target.value)}
+  1802→  1802→                  placeholder="如：descartes"
+  1803→  1803→                />
+  1804→  1804→              </Field>
+  1805→  1805→              <Field label="头像 URL">
+  1806→  1806→                <Input
+  1807→  1807→                  value={editingPhilosopher?.avatarUrl || ''}
+  1808→  1808→                  onChange={(e) => updateEditingField('avatarUrl', e.target.value)}
+  1809→  1809→                  placeholder="如：/avatars/descartes.png"
+  1810→  1810→                />
+  1811→  1811→              </Field>
+  1812→  1812→              <Field label="时代 *">
+  1813→  1813→                <Select
+  1814→  1814→                  value={editingPhilosopher?.era || '古典'}
+  1815→  1815→                  onValueChange={(v) => updateEditingField('era', v)}
+  1816→  1816→                >
+  1817→  1817→                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+  1818→  1818→                  <SelectContent>
+  1819→  1819→                    <SelectItem value="古典">古典</SelectItem>
+  1820→  1820→                    <SelectItem value="近代">近代</SelectItem>
+  1821→  1821→                    <SelectItem value="当代">当代</SelectItem>
+  1822→  1822→                    <SelectItem value="主理人">主理人</SelectItem>
+  1823→  1823→                  </SelectContent>
+  1824→  1824→                </Select>
+  1825→  1825→              </Field>
+  1826→  1826→              <Field label="分类 *">
+  1827→  1827→                <Select
+  1828→  1828→                  value={editingPhilosopher?.category || '综合类'}
+  1829→  1829→                  onValueChange={(v) => updateEditingField('category', v)}
+  1830→  1830→                >
+  1831→  1831→                  <SelectTrigger className="w-full"><SelectValue /></SelectTrigger>
+  1832→  1832→                  <SelectContent>
+  1833→  1833→                    <SelectItem value="情绪类">情绪类</SelectItem>
+  1834→  1834→                    <SelectItem value="关系类">关系类</SelectItem>
+  1835→  1835→                    <SelectItem value="选择类">选择类</SelectItem>
+  1836→  1836→                    <SelectItem value="意义类">意义类</SelectItem>
+  1837→  1837→                    <SelectItem value="综合类">综合类</SelectItem>
+  1838→  1838→                  </SelectContent>
+  1839→  1839→                </Select>
+  1840→  1840→              </Field>
+  1841→  1841→              <Field label="Tagline * (一句话标语)">
+  1842→  1842→                <Input
+  1843→  1843→                  value={editingPhilosopher?.tagline || ''}
+  1844→  1844→                  onChange={(e) => updateEditingField('tagline', e.target.value)}
+  1845→  1845→                  placeholder="如：我思故我在"
+  1846→  1846→                />
+  1847→  1847→              </Field>
+  1848→  1848→              <Field label="排序 (整数，越小越靠前)">
+  1849→  1849→                <Input
+  1850→  1850→                  type="number"
+  1851→  1851→                  value={editingPhilosopher?.order ?? 0}
+  1852→  1852→                  onChange={(e) => updateEditingField('order', parseInt(e.target.value || '0', 10) || 0)}
+  1853→  1853→                />
+  1854→  1854→              </Field>
+  1855→  1855→              <div className="md:col-span-2">
+  1856→  1856→                <Field label="Bio Summary * (短简介)">
+  1857→  1857→                  <Textarea
+  1858→  1858→                    rows={2}
+  1859→  1859→                    value={editingPhilosopher?.bioSummary || ''}
+  1860→  1860→                    onChange={(e) => updateEditingField('bioSummary', e.target.value)}
+  1861→  1861→                  />
+  1862→  1862→                </Field>
+  1863→  1863→              </div>
+  1864→  1864→              <div className="md:col-span-2">
+  1865→  1865→                <Field label="Core Insight * (核心洞察)">
+  1866→  1866→                  <Textarea
+  1867→  1867→                    rows={2}
+  1868→  1868→                    value={editingPhilosopher?.coreInsight || ''}
+  1869→  1869→                    onChange={(e) => updateEditingField('coreInsight', e.target.value)}
+  1870→  1870→                  />
+  1871→  1871→                </Field>
+  1872→  1872→              </div>
+  1873→  1873→              <div className="md:col-span-2">
+  1874→  1874→                <Field label="Description (详细介绍全文)">
+  1875→  1875→                  <Textarea
+  1876→  1876→                    rows={4}
+  1877→  1877→                    value={editingPhilosopher?.description || ''}
+  1878→  1878→                    onChange={(e) => updateEditingField('description', e.target.value)}
+  1879→  1879→                  />
+  1880→  1880→                </Field>
+  1881→  1881→              </div>
+  1882→  1882→              <div className="md:col-span-2">
+  1883→  1883→                <Field label="System Prompt * (AI 人设提示词)">
+  1884→  1884→                  <Textarea
+  1885→  1885→                    rows={5}
+  1886→  1886→                    value={editingPhilosopher?.systemPrompt || ''}
+  1887→  1887→                    onChange={(e) => updateEditingField('systemPrompt', e.target.value)}
+  1888→  1888→                  />
+  1889→  1889→                </Field>
+  1890→  1890→              </div>
+  1891→  1891→              <Field label="Quote * (代表性名言)">
+  1892→  1892→                <Input
+  1893→  1893→                  value={editingPhilosopher?.quote || ''}
+  1894→  1894→                  onChange={(e) => updateEditingField('quote', e.target.value)}
+  1895→  1895→                />
+  1896→  1896→              </Field>
+  1897→  1897→              <Field label="名言出处">
+  1898→  1898→                <Input
+  1899→  1899→                  value={editingPhilosopher?.quoteSource || ''}
+  1900→  1900→                  onChange={(e) => updateEditingField('quoteSource', e.target.value)}
+  1901→  1901→                />
+  1902→  1902→              </Field>
+  1903→  1903→              <Field label="Works (著作，逗号分隔)">
+  1904→  1904→                <Input
+  1905→  1905→                  value={editingPhilosopher?.works || ''}
+  1906→  1906→                  onChange={(e) => updateEditingField('works', e.target.value)}
+  1907→  1907→                  placeholder="如：《第一哲学沉思集》,《谈谈方法》"
+  1908→  1908→                />
+  1909→  1909→              </Field>
+  1910→  1910→              <Field label="Worries (烦恼标签，逗号分隔)">
+  1911→  1911→                <Input
+  1912→  1912→                  value={editingPhilosopher?.worries || ''}
+  1913→  1913→                  onChange={(e) => updateEditingField('worries', e.target.value)}
+  1914→  1914→                  placeholder="如：自我怀疑,身份认同危机"
+  1915→  1915→                />
+  1916→  1916→              </Field>
+  1917→  1917→              <div className="md:col-span-2 flex items-center gap-8 pt-2">
+  1918→  1918→                <div className="flex items-center gap-2">
+  1919→  1919→                  <Switch
+  1920→  1920→                    checked={!!editingPhilosopher?.published}
+  1921→  1921→                    onCheckedChange={(v) => updateEditingField('published', v)}
+  1922→  1922→                  />
+  1923→  1923→                  <Label>已发布</Label>
+  1924→  1924→                </div>
+  1925→  1925→                <div className="flex items-center gap-2">
+  1926→  1926→                  <Switch
+  1927→  1927→                    checked={!!editingPhilosopher?.isHost}
+  1928→  1928→                    onCheckedChange={(v) => updateEditingField('isHost', v)}
+  1929→  1929→                  />
+  1930→  1930→                  <Label>主理人</Label>
+  1931→  1931→                </div>
+  1932→  1932→              </div>
+  1933→  1933→            </div>
+  1934→  1934→            <DialogFooter>
+  1935→  1935→              <Button variant="outline" onClick={() => setEditingPhilosopher(null)} disabled={philosopherSaving}>
+  1936→  1936→                取消
+  1937→  1937→              </Button>
+  1938→  1938→              <Button
+  1939→  1939→                onClick={savePhilosopher}
+  1940→  1940→                disabled={philosopherSaving}
+  1941→  1941→                className="bg-amber-600 hover:bg-amber-700 text-white"
+  1942→  1942→              >
+  1943→  1943→                {philosopherSaving
+  1944→  1944→                  ? <Loader2 className="size-4 mr-1 animate-spin" />
+  1945→  1945→                  : <Save className="size-4 mr-1" />}
+  1946→  1946→                保存
+  1947→  1947→              </Button>
+  1948→  1948→            </DialogFooter>
+  1949→  1949→          </DialogContent>
+  1950→  1950→        </Dialog>
+  1951→  1951→
+  1952→  1952→        {/* 哲学家删除确认弹窗 */}
+  1953→  1953→        <Dialog open={!!deletingPhilosopher} onOpenChange={(o) => !o && setDeletingPhilosopher(null)}>
+  1954→  1954→          <DialogContent className="sm:max-w-md">
+  1955→  1955→            <DialogHeader>
+  1956→  1956→              <DialogTitle>确认删除</DialogTitle>
+  1957→  1957→              <DialogDescription>
+  1958→  1958→                确定要删除哲学家 <span className="font-medium text-gray-900">{deletingPhilosopher?.nameCn}</span>
+  1959→  1959→                （{deletingPhilosopher?.slug}）吗？此操作不可撤销。
+  1960→  1960→                {!!deletingPhilosopher && (deletingPhilosopher._count?.conversations ?? 0) > 0 && (
+  1961→  1961→                  <span className="block mt-2 text-red-600">
+  1962→  1962→                    该哲学家存在 {deletingPhilosopher._count?.conversations} 条关联对话，无法直接删除。请先迁移对话后再尝试。
+  1963→  1963→                  </span>
+  1964→  1964→                )}
+  1965→  1965→              </DialogDescription>
+  1966→  1966→            </DialogHeader>
+  1967→  1967→            {philosopherError && (
+  1968→  1968→              <div className="text-sm text-red-600 bg-red-50 rounded-lg p-2">{philosopherError}</div>
+  1969→  1969→            )}
+  1970→  1970→            <DialogFooter>
+  1971→  1971→              <Button variant="outline" onClick={() => setDeletingPhilosopher(null)} disabled={philosopherSaving}>
+  1972→  1972→                取消
+  1973→  1973→              </Button>
+  1974→  1974→              <Button
+  1975→  1975→                variant="destructive"
+  1976→  1976→                onClick={() => deletePhilosopher(deletingPhilosopher)}
+  1977→  1977→                disabled={
+  1978→  1978→                  philosopherSaving ||
+  1979→  1979→                  (!!deletingPhilosopher && (deletingPhilosopher._count?.conversations ?? 0) > 0)
+  1980→  1980→                }
+  1981→  1981→              >
+  1982→  1982→                {philosopherSaving
+  1983→  1983→                  ? <Loader2 className="size-4 mr-1 animate-spin" />
+  1984→  1984→                  : <Trash2 className="size-4 mr-1" />}
+  1985→  1985→                确认删除
+  1986→  1986→              </Button>
+  1987→  1987→            </DialogFooter>
+  1988→  1988→          </DialogContent>
+  1989→  1989→        </Dialog>
+  1990→  1990→      </main>
+  1991→  1991→    </div>
+  1992→  1992→  )
+  1993→  1993→}
+  1994→  1994→
+  1995→  1995→function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  1996→  1996→  return (
+  1997→  1997→    <div className="space-y-1.5">
+  1998→  1998→      <Label className="text-xs text-gray-600">{label}</Label>
+  1999→  1999→      {children}
+  2000→  2000→    </div>
+
+[showing lines 1-2000 of 2002; use offset=2001 with limit to continue reading]
