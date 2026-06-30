@@ -1,6 +1,6 @@
 'use client'
 
-import { Crown, Settings } from 'lucide-react'
+import { Crown, Settings, Coins, BookOpen, Bot, Gift } from 'lucide-react'
 import ThemeToggle from '@/components/theme-toggle'
 import { useAppStore } from '@/lib/store'
 
@@ -19,8 +19,36 @@ export default function Footer() {
         <p className="text-xs text-[var(--app-text-muted)] mb-3">
           120位跨越时空的东西方思想者，为你的人生困境点亮一盏灯
         </p>
-        <div className="flex justify-center items-center gap-3">
+        <div className="flex justify-center items-center gap-3 flex-wrap">
           <ThemeToggle />
+          <button
+            onClick={() => setView('tokenshop')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs text-[var(--app-accent)] hover:bg-[var(--app-accent)]/10 transition-colors min-h-[36px]"
+          >
+            <Coins className="size-3.5" />
+            Token 商店
+          </button>
+          <button
+            onClick={() => setView('articles')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs text-[var(--app-accent)] hover:bg-[var(--app-accent)]/10 transition-colors min-h-[36px]"
+          >
+            <BookOpen className="size-3.5" />
+            深度专栏
+          </button>
+          <button
+            onClick={() => setView('digitallife')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs text-[var(--app-accent)] hover:bg-[var(--app-accent)]/10 transition-colors min-h-[36px]"
+          >
+            <Bot className="size-3.5" />
+            数字生命体
+          </button>
+          <button
+            onClick={() => setView('referral')}
+            className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs text-[var(--app-accent)] hover:bg-[var(--app-accent)]/10 transition-colors min-h-[36px]"
+          >
+            <Gift className="size-3.5" />
+            推广联盟
+          </button>
           <button
             onClick={() => setView('subscription')}
             className="inline-flex items-center gap-1.5 px-3 py-2 rounded-md text-xs text-[var(--app-accent)] hover:bg-[var(--app-accent)]/10 transition-colors min-h-[36px]"

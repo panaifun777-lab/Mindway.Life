@@ -19,6 +19,10 @@ import UserMenu from '@/components/user-menu'
 import Footer from '@/components/footer'
 import ThemeToggle from '@/components/theme-toggle'
 import AdminPanel from '@/components/admin-panel'
+import TokenShop from '@/components/token-shop'
+import ArticleList from '@/components/article-list'
+import DigitalLifeView from '@/components/digital-life-view'
+import ReferralView from '@/components/referral-view'
 
 function AppContent() {
   const { currentView, goHome, login } = useAppStore()
@@ -43,7 +47,7 @@ function AppContent() {
   // Views that use the shared header
   const headerViews = ['home', 'detail']
   // Full-screen views that manage their own header
-  const fullScreenViews = ['chat', 'debate', 'quiz', 'login', 'register', 'subscription', 'admin']
+  const fullScreenViews = ['chat', 'debate', 'quiz', 'login', 'register', 'subscription', 'admin', 'tokenshop', 'articles', 'digitallife', 'referral']
 
   // Admin panel - full screen, no app header
   if (currentView === 'admin') {
@@ -135,6 +139,10 @@ function AppContent() {
             {currentView === 'login' && <AuthView />}
             {currentView === 'register' && <AuthView />}
             {currentView === 'subscription' && <SubscriptionView />}
+            {currentView === 'tokenshop' && <TokenShop />}
+            {currentView === 'articles' && <ArticleList />}
+            {currentView === 'digitallife' && <DigitalLifeView />}
+            {currentView === 'referral' && <ReferralView />}
           </AnimatePresence>
         </>
       )}

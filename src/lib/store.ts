@@ -1,6 +1,6 @@
 import { create } from 'zustand'
 
-type View = 'home' | 'detail' | 'chat' | 'debate' | 'quiz' | 'login' | 'register' | 'subscription' | 'host' | 'admin'
+type View = 'home' | 'detail' | 'chat' | 'debate' | 'quiz' | 'login' | 'register' | 'subscription' | 'host' | 'admin' | 'tokenshop' | 'articles' | 'digitallife' | 'referral'
 
 interface User {
   id: string

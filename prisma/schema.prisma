@@ -70,6 +70,8 @@ model User {
   plan           String   @default("free") // free / pro / premium
   role           String   @default("user") // user / admin
   stripeCustomerId String @default("")
+  referralCode   String   @default("")
+  referredBy     String   @default("")
   createdAt      DateTime @default(now())
   updatedAt      DateTime @updatedAt
 
@@ -184,4 +186,93 @@ model ConversationRating {
   createdAt     DateTime @default(now())
 
   @@map("conversation_ratings")
+}
+
+// ===== 盈利模型 =====
+
+model TokenAccount {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  balance         Int      @default(100)
+  totalPurchased  Int      @default(0)
+  totalConsumed   Int      @default(0)
+  monthlyResetAt  DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+
+  @@map("token_accounts")
+}
+
+model TokenTransaction {
+  id          String   @id @default(cuid())
+  userId      String
+  type        String
+  amount      Int
+  balance     Int
+  description String   @default("")
+  createdAt   DateTime @default(now())
+
+  @@map("token_transactions")
+}
+
+model Article {
+  id            String   @id @default(cuid())
+  authorId      String
+  philosopherId String?
+  title         String
+  summary       String   @default("")
+  content       String   @default("")
+  coverImage    String   @default("")
+  price         Int      @default(0)
+  category      String   @default("philosophy")
+  tags          String   @default("")
+  published     Boolean  @default(true)
+  viewCount     Int      @default(0)
+  likeCount     Int      @default(0)
+  createdAt     DateTime @default(now())
+  updatedAt     DateTime @updatedAt
+
+  @@map("articles")
+}
+
+model ArticlePurchase {
+  id          String   @id @default(cuid())
+  userId      String
+  articleId   String
+  price       Int
+  createdAt   DateTime @default(now())
+
+  @@unique([userId, articleId])
+  @@map("article_purchases")
+}
+
+model DigitalLife {
+  id                String   @id @default(cuid())
+  userId            String   @unique
+  name              String
+  description       String   @default("")
+  personality       String   @default("")
+  knowledgeBase     String   @default("")
+  systemPrompt      String   @default("")
+  avatar            String   @default("")
+  tier              String   @default("basic")
+  conversationCount Int      @default(0)
+  maxConversations  Int      @default(100)
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  @@map("digital_lives")
+}
+
+model Referral {
+  id           String   @id @default(cuid())
+  referrerId   String
+  referredId   String
+  referralCode String
+  commission   Int      @default(0)
+  status       String   @default("registered")
+  createdAt    DateTime @default(now())
+  paidAt       DateTime?
+
+  @@map("referrals")
 }
